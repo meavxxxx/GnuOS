@@ -15,6 +15,7 @@ Thanks for helping build GNU OS.
 - New behavior needs tests when possible.
 - Kernel-impacting changes require security review.
 - At least two approvals are required before merge.
+- After completing roadmap items, update checkboxes in `README.md` in the same change set.
 
 ## Coding rules
 
@@ -30,4 +31,3 @@ make ARCH=x86_64 kernel
 make ARCH=x86_64 image
 make ARCH=x86_64 run
 ```
-
