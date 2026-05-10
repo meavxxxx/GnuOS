@@ -6,6 +6,7 @@
 #include <gnuos/mm.h>
 #include <gnuos/multiboot2.h>
 #include <gnuos/panic.h>
+#include <gnuos/pci.h>
 #include <gnuos/pic.h>
 #include <gnuos/pit.h>
 #include <gnuos/printk.h>
@@ -307,6 +308,7 @@ void kmain(uint64_t boot_magic, uint64_t boot_info_addr)
         pic_set_mask(irq);
     }
     ps2_keyboard_init();
+    pci_init();
     pic_clear_mask(0U);
     pic_clear_mask(1U);
     pit_init(100U);
