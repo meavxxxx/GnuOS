@@ -11,6 +11,7 @@
 #include <gnuos/sched.h>
 #include <gnuos/serial.h>
 #include <gnuos/vmm.h>
+#include <gnuos/workqueue.h>
 
 #define VGA_WIDTH 80
 #define VGA_HEIGHT 25
@@ -25,63 +26,78 @@ extern uint8_t __kernel_end;
 typedef struct {
     const char *name;
     uint32_t period_ticks;
-    uint64_t events;
-} demo_wait_arg_t;
+    uint64_t produced;
+    uint64_t dropped;
+} demo_producer_arg_t;
 
-static wait_queue_t g_demo_wait_queue;
+typedef struct {
+    const char *name;
+    uint64_t handled;
+} demo_worker_arg_t;
 
-static demo_wait_arg_t g_waiter = {
-    .name = "waiter",
-    .period_ticks = 0U,
-    .events = 0U,
+static work_queue_t g_demo_workqueue;
+
+static demo_worker_arg_t g_demo_worker = {
+    .name = "wq-worker",
+    .handled = 0U,
 };
 
-static demo_wait_arg_t g_waker = {
-    .name = "waker",
-    .period_ticks = 40U,
-    .events = 0U,
+static demo_producer_arg_t g_demo_producer = {
+    .name = "wq-producer",
+    .period_ticks = 30U,
+    .produced = 0U,
+    .dropped = 0U,
 };
 
-static void demo_waiter_entry(void *arg)
+static void demo_work_handler(void *arg)
 {
-    demo_wait_arg_t *waiter = (demo_wait_arg_t *)arg;
+    uint64_t token = (uint64_t)(uintptr_t)arg;
+    g_demo_worker.handled++;
+    kprintf(
+        "GNU OS: %s handled id=%u, handled=%u, pending=%u\n",
+        g_demo_worker.name,
+        token,
+        g_demo_worker.handled,
+        workqueue_pending(&g_demo_workqueue));
+}
 
+static void demo_workqueue_worker_entry(void *arg)
+{
+    (void)arg;
     for (;;) {
-        kprintf("GNU OS: %s blocking, ticks=%u\n", waiter->name, pit_ticks());
-        if (!sched_wait_queue_wait(&g_demo_wait_queue)) {
-            serial_write("GNU OS: waiter failed to block on wait queue.\n");
-            sched_yield();
-            continue;
-        }
-
-        waiter->events++;
-        kprintf(
-            "GNU OS: %s wakeups=%u, ticks=%u\n",
-            waiter->name,
-            waiter->events,
-            pit_ticks());
+        (void)workqueue_execute_one(&g_demo_workqueue, 1);
         sched_yield();
     }
 }
 
-static void demo_waker_entry(void *arg)
+static void demo_workqueue_producer_entry(void *arg)
 {
-    demo_wait_arg_t *waker = (demo_wait_arg_t *)arg;
+    demo_producer_arg_t *producer = (demo_producer_arg_t *)arg;
     uint64_t last_tick = pit_ticks();
 
     for (;;) {
-        while ((pit_ticks() - last_tick) < waker->period_ticks) {
+        while ((pit_ticks() - last_tick) < producer->period_ticks) {
             __asm__ volatile("hlt");
         }
 
         last_tick = pit_ticks();
-        waker->events++;
-        int woke = sched_wait_queue_wake_one(&g_demo_wait_queue);
+        uint64_t token = producer->produced + producer->dropped + 1U;
+        int queued = workqueue_submit(
+            &g_demo_workqueue,
+            demo_work_handler,
+            (void *)(uintptr_t)token);
+        if (queued) {
+            producer->produced++;
+        } else {
+            producer->dropped++;
+        }
+
         kprintf(
-            "GNU OS: %s signals=%u, woke=%u, total_ticks=%u\n",
-            waker->name,
-            waker->events,
-            (uint64_t)(woke ? 1U : 0U),
+            "GNU OS: %s queued=%u dropped=%u pending=%u ticks=%u\n",
+            producer->name,
+            producer->produced,
+            producer->dropped,
+            workqueue_pending(&g_demo_workqueue),
             sched_total_ticks());
         sched_yield();
     }
@@ -146,8 +162,8 @@ void kmain(uint64_t boot_magic, uint64_t boot_info_addr)
     uint64_t split_test_virt = 0x0000000000200000ULL;
     uint64_t ticks_before = 0;
     task_t *current_task = NULL;
-    task_t *waiter_task = NULL;
-    task_t *waker_task = NULL;
+    task_t *worker_task = NULL;
+    task_t *producer_task = NULL;
     int have_mmap = 0;
 
     vga_clear(0x07);
@@ -179,14 +195,15 @@ void kmain(uint64_t boot_magic, uint64_t boot_info_addr)
     }
 
     sched_init();
-    sched_wait_queue_init(&g_demo_wait_queue);
+    workqueue_init(&g_demo_workqueue, "demo");
     if (!sched_create_idle_task()) {
         kpanic("failed to create idle task");
     }
-    waiter_task = sched_create_kernel_task("waiter", demo_waiter_entry, &g_waiter);
-    waker_task = sched_create_kernel_task("waker", demo_waker_entry, &g_waker);
-    if (!waiter_task || !waker_task) {
-        kpanic("failed to create wait queue demo tasks");
+    worker_task = sched_create_kernel_task("wq-worker", demo_workqueue_worker_entry, NULL);
+    producer_task =
+        sched_create_kernel_task("wq-producer", demo_workqueue_producer_entry, &g_demo_producer);
+    if (!worker_task || !producer_task) {
+        kpanic("failed to create workqueue demo tasks");
     }
 
     pic_init(PIC_IRQ_BASE, (uint8_t)(PIC_IRQ_BASE + 8U));

@@ -36,6 +36,7 @@ KERNEL_C_SOURCES := \
 	kernel/mm/pmm.c \
 	kernel/mm/vmm.c \
 	kernel/sched/sched.c \
+	kernel/sched/workqueue.c \
 	kernel/lib/spinlock.c \
 	kernel/lib/mutex.c \
 	kernel/lib/rwlock.c \
