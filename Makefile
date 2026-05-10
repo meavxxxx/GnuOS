@@ -24,7 +24,7 @@ ISO_IMAGE := $(BUILD_DIR)/gnuos-$(ARCH).iso
 
 COMMON_CFLAGS := -std=$(CSTD) -O2 -g -ffreestanding -fno-stack-protector -fno-pie \
 	-mno-red-zone -mgeneral-regs-only -Wall -Wextra -Wpedantic -Iinclude -Ikernel/include
-COMMON_LDFLAGS := -nostdlib -no-pie -Wl,-n,-T,$(KERNEL_LINKER_SCRIPT)
+COMMON_LDFLAGS := -nostdlib -no-pie -Wl,--build-id=none,-n,-T,$(KERNEL_LINKER_SCRIPT)
 
 KERNEL_C_SOURCES := \
 	kernel/init/kmain.c \
