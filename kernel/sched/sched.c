@@ -3,6 +3,7 @@
 
 #include <gnuos/sched.h>
 #include <gnuos/serial.h>
+#include <gnuos/spinlock.h>
 
 #define SCHED_MAX_TASKS 128U
 #define SCHED_READY_QUEUE_CAPACITY SCHED_MAX_TASKS
@@ -16,6 +17,7 @@ static uint16_t g_ready_size;
 static uint64_t g_next_pid = 1;
 static uint64_t g_next_tid = 1;
 static task_t *g_current_task;
+static spinlock_t g_sched_lock;
 
 static int sched_enqueue_task(uint16_t task_index)
 {
@@ -57,6 +59,9 @@ static task_t *sched_alloc_task_slot(uint16_t *out_index)
 
 void sched_init(void)
 {
+    spinlock_init(&g_sched_lock);
+    spinlock_lock(&g_sched_lock);
+
     for (uint16_t i = 0; i < SCHED_MAX_TASKS; i++) {
         g_processes[i].pid = 0;
         g_tasks[i].tid = 0;
@@ -74,19 +79,30 @@ void sched_init(void)
     g_next_tid = 1;
     g_current_task = NULL;
 
+    spinlock_unlock(&g_sched_lock);
     serial_write("GNU OS: scheduler initialized.\n");
 }
 
 task_t *sched_current_task(void)
 {
-    return g_current_task;
+    task_t *current = NULL;
+
+    spinlock_lock(&g_sched_lock);
+    current = g_current_task;
+    spinlock_unlock(&g_sched_lock);
+
+    return current;
 }
 
 task_t *sched_create_kernel_task(const char *name, kernel_task_entry_t entry, void *arg)
 {
     uint16_t index = 0;
+    task_t *created_task = NULL;
+
+    spinlock_lock(&g_sched_lock);
     task_t *task = sched_alloc_task_slot(&index);
     if (!task) {
+        spinlock_unlock(&g_sched_lock);
         return NULL;
     }
 
@@ -104,10 +120,13 @@ task_t *sched_create_kernel_task(const char *name, kernel_task_entry_t entry, vo
         task->state = TASK_UNUSED;
         task->process = NULL;
         process->pid = 0;
+        spinlock_unlock(&g_sched_lock);
         return NULL;
     }
 
-    return task;
+    created_task = task;
+    spinlock_unlock(&g_sched_lock);
+    return created_task;
 }
 
 static void sched_idle_entry(void *arg)
@@ -132,13 +151,17 @@ task_t *sched_create_idle_task(void)
 
 void sched_tick(void)
 {
+    spinlock_lock(&g_sched_lock);
+
     uint16_t next_index = 0;
     if (!sched_dequeue_task(&next_index)) {
+        spinlock_unlock(&g_sched_lock);
         return;
     }
 
     task_t *next = &g_tasks[next_index];
     if (next->state != TASK_READY) {
+        spinlock_unlock(&g_sched_lock);
         return;
     }
 
@@ -154,10 +177,16 @@ void sched_tick(void)
 
     next->state = TASK_RUNNING;
     g_current_task = next;
+    spinlock_unlock(&g_sched_lock);
 }
 
 uint64_t sched_ready_count(void)
 {
-    return g_ready_size;
-}
+    uint64_t ready = 0;
 
+    spinlock_lock(&g_sched_lock);
+    ready = g_ready_size;
+    spinlock_unlock(&g_sched_lock);
+
+    return ready;
+}
