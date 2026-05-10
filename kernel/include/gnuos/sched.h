@@ -3,6 +3,8 @@
 
 #include <stdint.h>
 
+#define SCHED_WAIT_QUEUE_CAPACITY 128U
+
 typedef void (*kernel_task_entry_t)(void *arg);
 
 typedef enum {
@@ -41,10 +43,21 @@ typedef struct task {
     uint64_t kernel_stack_size;
 } task_t;
 
+typedef struct wait_queue {
+    uint16_t queue[SCHED_WAIT_QUEUE_CAPACITY];
+    uint16_t head;
+    uint16_t tail;
+    uint16_t size;
+} wait_queue_t;
+
 void sched_init(void);
 task_t *sched_current_task(void);
 task_t *sched_create_kernel_task(const char *name, kernel_task_entry_t entry, void *arg);
 task_t *sched_create_idle_task(void);
+void sched_wait_queue_init(wait_queue_t *queue);
+int sched_wait_queue_wait(wait_queue_t *queue);
+int sched_wait_queue_wake_one(wait_queue_t *queue);
+uint64_t sched_wait_queue_wake_all(wait_queue_t *queue);
 void sched_tick(void);
 void sched_request_resched(void);
 int sched_run(void);

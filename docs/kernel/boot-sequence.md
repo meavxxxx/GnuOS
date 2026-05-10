@@ -13,7 +13,7 @@
 11. PIC is remapped, PIT timer is configured, and IRQ0 is unmasked.
 12. Hardware interrupts are enabled and timer ticks reach scheduler.
 13. Scheduler can dispatch kernel tasks using saved/restored task contexts.
-14. Demo worker tasks yield cooperatively and report progress over serial.
+14. Demo waiter/waker tasks exercise wait queues with block/wake transitions over serial.
 15. CPU falls back to idle (`hlt`) only when no runnable task is available.
 
 This is intentionally minimal and acts as phase-0/1 scaffolding.

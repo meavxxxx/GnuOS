@@ -25,37 +25,63 @@ extern uint8_t __kernel_end;
 typedef struct {
     const char *name;
     uint32_t period_ticks;
-    uint64_t iterations;
-} demo_worker_arg_t;
+    uint64_t events;
+} demo_wait_arg_t;
 
-static demo_worker_arg_t g_worker_a = {
-    .name = "worker-a",
-    .period_ticks = 20U,
-    .iterations = 0,
+static wait_queue_t g_demo_wait_queue;
+
+static demo_wait_arg_t g_waiter = {
+    .name = "waiter",
+    .period_ticks = 0U,
+    .events = 0U,
 };
 
-static demo_worker_arg_t g_worker_b = {
-    .name = "worker-b",
-    .period_ticks = 35U,
-    .iterations = 0,
+static demo_wait_arg_t g_waker = {
+    .name = "waker",
+    .period_ticks = 40U,
+    .events = 0U,
 };
 
-static void demo_worker_entry(void *arg)
+static void demo_waiter_entry(void *arg)
 {
-    demo_worker_arg_t *worker = (demo_worker_arg_t *)arg;
+    demo_wait_arg_t *waiter = (demo_wait_arg_t *)arg;
+
+    for (;;) {
+        kprintf("GNU OS: %s blocking, ticks=%u\n", waiter->name, pit_ticks());
+        if (!sched_wait_queue_wait(&g_demo_wait_queue)) {
+            serial_write("GNU OS: waiter failed to block on wait queue.\n");
+            sched_yield();
+            continue;
+        }
+
+        waiter->events++;
+        kprintf(
+            "GNU OS: %s wakeups=%u, ticks=%u\n",
+            waiter->name,
+            waiter->events,
+            pit_ticks());
+        sched_yield();
+    }
+}
+
+static void demo_waker_entry(void *arg)
+{
+    demo_wait_arg_t *waker = (demo_wait_arg_t *)arg;
     uint64_t last_tick = pit_ticks();
 
     for (;;) {
-        while ((pit_ticks() - last_tick) < worker->period_ticks) {
+        while ((pit_ticks() - last_tick) < waker->period_ticks) {
             __asm__ volatile("hlt");
         }
 
         last_tick = pit_ticks();
-        worker->iterations++;
+        waker->events++;
+        int woke = sched_wait_queue_wake_one(&g_demo_wait_queue);
         kprintf(
-            "GNU OS: %s iteration=%u, total_ticks=%u\n",
-            worker->name,
-            worker->iterations,
+            "GNU OS: %s signals=%u, woke=%u, total_ticks=%u\n",
+            waker->name,
+            waker->events,
+            (uint64_t)(woke ? 1U : 0U),
             sched_total_ticks());
         sched_yield();
     }
@@ -120,8 +146,8 @@ void kmain(uint64_t boot_magic, uint64_t boot_info_addr)
     uint64_t split_test_virt = 0x0000000000200000ULL;
     uint64_t ticks_before = 0;
     task_t *current_task = NULL;
-    task_t *worker_task_a = NULL;
-    task_t *worker_task_b = NULL;
+    task_t *waiter_task = NULL;
+    task_t *waker_task = NULL;
     int have_mmap = 0;
 
     vga_clear(0x07);
@@ -153,13 +179,14 @@ void kmain(uint64_t boot_magic, uint64_t boot_info_addr)
     }
 
     sched_init();
+    sched_wait_queue_init(&g_demo_wait_queue);
     if (!sched_create_idle_task()) {
         kpanic("failed to create idle task");
     }
-    worker_task_a = sched_create_kernel_task("worker-a", demo_worker_entry, &g_worker_a);
-    worker_task_b = sched_create_kernel_task("worker-b", demo_worker_entry, &g_worker_b);
-    if (!worker_task_a || !worker_task_b) {
-        kpanic("failed to create demo worker tasks");
+    waiter_task = sched_create_kernel_task("waiter", demo_waiter_entry, &g_waiter);
+    waker_task = sched_create_kernel_task("waker", demo_waker_entry, &g_waker);
+    if (!waiter_task || !waker_task) {
+        kpanic("failed to create wait queue demo tasks");
     }
 
     pic_init(PIC_IRQ_BASE, (uint8_t)(PIC_IRQ_BASE + 8U));

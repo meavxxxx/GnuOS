@@ -67,6 +67,66 @@ static int sched_dequeue_task(uint16_t *out_task_index)
     return 1;
 }
 
+static int sched_waitq_enqueue(wait_queue_t *queue, uint16_t task_index)
+{
+    if (!queue || queue->size >= SCHED_WAIT_QUEUE_CAPACITY) {
+        return 0;
+    }
+
+    queue->queue[queue->tail] = task_index;
+    queue->tail = (uint16_t)((queue->tail + 1U) % SCHED_WAIT_QUEUE_CAPACITY);
+    queue->size++;
+    return 1;
+}
+
+static int sched_waitq_dequeue(wait_queue_t *queue, uint16_t *out_task_index)
+{
+    if (!queue || !out_task_index || queue->size == 0U) {
+        return 0;
+    }
+
+    *out_task_index = queue->queue[queue->head];
+    queue->head = (uint16_t)((queue->head + 1U) % SCHED_WAIT_QUEUE_CAPACITY);
+    queue->size--;
+    return 1;
+}
+
+static int sched_wake_one_locked(wait_queue_t *queue)
+{
+    if (!queue) {
+        return 0;
+    }
+
+    uint16_t attempts = queue->size;
+    while (attempts-- > 0U) {
+        uint16_t candidate = 0;
+        if (!sched_waitq_dequeue(queue, &candidate)) {
+            return 0;
+        }
+
+        if (candidate >= SCHED_MAX_TASKS) {
+            continue;
+        }
+
+        task_t *task = &g_tasks[candidate];
+        if (task->state != TASK_BLOCKED) {
+            continue;
+        }
+
+        task->state = TASK_READY;
+        if (!sched_enqueue_task(candidate)) {
+            task->state = TASK_BLOCKED;
+            (void)sched_waitq_enqueue(queue, candidate);
+            return 0;
+        }
+
+        g_need_resched = 1;
+        return 1;
+    }
+
+    return 0;
+}
+
 static task_t *sched_alloc_task_slot(uint16_t *out_index)
 {
     for (uint16_t i = 0; i < SCHED_MAX_TASKS; i++) {
@@ -296,6 +356,89 @@ task_t *sched_create_idle_task(void)
 
     serial_write("GNU OS: idle task created.\n");
     return idle;
+}
+
+void sched_wait_queue_init(wait_queue_t *queue)
+{
+    if (!queue) {
+        return;
+    }
+
+    uint64_t irq_flags = sched_irq_save();
+    spinlock_lock(&g_sched_lock);
+    queue->head = 0;
+    queue->tail = 0;
+    queue->size = 0;
+    spinlock_unlock(&g_sched_lock);
+    sched_irq_restore(irq_flags);
+}
+
+int sched_wait_queue_wait(wait_queue_t *queue)
+{
+    if (!queue) {
+        return 0;
+    }
+
+    task_t *current = NULL;
+    uint16_t current_index = SCHED_TASK_INDEX_NONE;
+
+    uint64_t irq_flags = sched_irq_save();
+    spinlock_lock(&g_sched_lock);
+
+    current = g_current_task;
+    current_index = g_current_index;
+    if (!current ||
+        current == &g_bootstrap_task ||
+        current->state != TASK_RUNNING ||
+        current_index == SCHED_TASK_INDEX_NONE) {
+        spinlock_unlock(&g_sched_lock);
+        sched_irq_restore(irq_flags);
+        return 0;
+    }
+
+    if (!sched_waitq_enqueue(queue, current_index)) {
+        spinlock_unlock(&g_sched_lock);
+        sched_irq_restore(irq_flags);
+        return 0;
+    }
+
+    current->state = TASK_BLOCKED;
+    g_current_task = &g_bootstrap_task;
+    g_current_index = SCHED_TASK_INDEX_NONE;
+
+    spinlock_unlock(&g_sched_lock);
+    sched_irq_restore(irq_flags);
+
+    x86_64_context_switch(&current->context, &g_bootstrap_task.context);
+    return 1;
+}
+
+int sched_wait_queue_wake_one(wait_queue_t *queue)
+{
+    int woke = 0;
+
+    uint64_t irq_flags = sched_irq_save();
+    spinlock_lock(&g_sched_lock);
+    woke = sched_wake_one_locked(queue);
+    spinlock_unlock(&g_sched_lock);
+    sched_irq_restore(irq_flags);
+
+    return woke;
+}
+
+uint64_t sched_wait_queue_wake_all(wait_queue_t *queue)
+{
+    uint64_t woke = 0;
+
+    uint64_t irq_flags = sched_irq_save();
+    spinlock_lock(&g_sched_lock);
+    while (sched_wake_one_locked(queue)) {
+        woke++;
+    }
+    spinlock_unlock(&g_sched_lock);
+    sched_irq_restore(irq_flags);
+
+    return woke;
 }
 
 void sched_tick(void)
