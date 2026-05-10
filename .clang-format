@@ -1,0 +1,7 @@
+BasedOnStyle: GNU
+IndentWidth: 4
+ColumnLimit: 100
+UseTab: Never
+AllowShortIfStatementsOnASingleLine: Never
+SortIncludes: Never
+

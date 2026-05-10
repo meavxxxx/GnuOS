@@ -1,0 +1,18 @@
+name: bootstrap-ci
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  build-kernel:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install build deps
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y make gcc-x86-64-linux-gnu binutils-x86-64-linux-gnu
+      - name: Build bootstrap kernel
+        run: make ARCH=x86_64 TARGET=x86_64-linux-gnu kernel
+

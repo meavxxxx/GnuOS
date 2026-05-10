@@ -1,0 +1,33 @@
+# Contributing to GNU OS
+
+Thanks for helping build GNU OS.
+
+## Development flow
+
+1. Create a feature branch from `main`.
+2. Keep commits focused and use Conventional Commits (`feat:`, `fix:`, `docs:`).
+3. Run local checks before opening a merge request.
+4. Open MR with a clear summary, risk notes, and test evidence.
+
+## Pull request requirements
+
+- CI must pass.
+- New behavior needs tests when possible.
+- Kernel-impacting changes require security review.
+- At least two approvals are required before merge.
+
+## Coding rules
+
+- C code follows GNU style and project `.clang-format`.
+- Public interfaces must be documented in headers.
+- Line length limit: 100.
+- `goto` is allowed only for structured cleanup in kernel error paths.
+
+## Local quick start
+
+```bash
+make ARCH=x86_64 kernel
+make ARCH=x86_64 image
+make ARCH=x86_64 run
+```
+

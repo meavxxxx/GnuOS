@@ -1,0 +1,9 @@
+build/
+*.iso
+*.elf
+*.o
+*.d
+*.log
+*.tmp
+compile_commands.json
+
