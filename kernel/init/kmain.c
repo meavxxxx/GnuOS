@@ -3,6 +3,7 @@
 
 #include <gnuos/interrupts.h>
 #include <gnuos/keyboard.h>
+#include <gnuos/dma.h>
 #include <gnuos/mm.h>
 #include <gnuos/multiboot2.h>
 #include <gnuos/panic.h>
@@ -309,6 +310,7 @@ void kmain(uint64_t boot_magic, uint64_t boot_info_addr)
     }
     ps2_keyboard_init();
     pci_init();
+    dma_init();
     pic_clear_mask(0U);
     pic_clear_mask(1U);
     pit_init(100U);
