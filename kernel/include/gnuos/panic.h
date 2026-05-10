@@ -10,6 +10,9 @@ __attribute__((noreturn)) void kpanic_exception(
     uint8_t vector,
     uint64_t error_code,
     const struct interrupt_frame *frame);
+__attribute__((noreturn)) void kpanic_page_fault(
+    uint64_t fault_address,
+    uint64_t error_code,
+    const struct interrupt_frame *frame);
 
 #endif
-

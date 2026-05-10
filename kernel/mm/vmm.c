@@ -13,6 +13,9 @@
 #define VMM_PAGE_SIZE 0x080ULL
 #define VMM_PHYS_MASK 0x000FFFFFFFFFF000ULL
 #define VMM_PAGE_OFFSET_MASK 0xFFFULL
+#define VMM_HUGE2M_SIZE (2ULL * 1024ULL * 1024ULL)
+#define VMM_HUGE2M_OFFSET_MASK (VMM_HUGE2M_SIZE - 1ULL)
+#define VMM_HUGE2M_BASE_MASK (VMM_PHYS_MASK & ~VMM_HUGE2M_OFFSET_MASK)
 #define VMM_KERNEL_HEAP_BASE 0x0000000040000000ULL
 
 static uint64_t *g_pml4;
@@ -53,6 +56,45 @@ static void vmm_zero_page(uint64_t *table)
     for (uint16_t i = 0; i < VMM_ENTRIES_PER_TABLE; i++) {
         table[i] = 0;
     }
+}
+
+static int vmm_split_large_pd_entry(uint64_t *pd, uint16_t index)
+{
+    uint64_t pde = pd[index];
+    if ((pde & VMM_PAGE_PRESENT) == 0 || (pde & VMM_PAGE_SIZE) == 0) {
+        return 0;
+    }
+
+    uint64_t *pt = (uint64_t *)pmm_alloc_page();
+    if (!pt) {
+        return 0;
+    }
+
+    vmm_zero_page(pt);
+
+    uint64_t huge_base = pde & VMM_HUGE2M_BASE_MASK;
+    uint64_t child_flags = VMM_PAGE_PRESENT;
+    if ((pde & VMM_PAGE_WRITABLE) != 0) {
+        child_flags |= VMM_PAGE_WRITABLE;
+    }
+    if ((pde & VMM_PAGE_USER) != 0) {
+        child_flags |= VMM_PAGE_USER;
+    }
+    if ((pde & VMM_MAP_NX) != 0) {
+        child_flags |= VMM_MAP_NX;
+    }
+
+    for (uint16_t i = 0; i < VMM_ENTRIES_PER_TABLE; i++) {
+        uint64_t phys = huge_base + ((uint64_t)i * MM_PAGE_SIZE);
+        pt[i] = (phys & VMM_PHYS_MASK) | child_flags;
+    }
+
+    uint64_t pd_flags = VMM_PAGE_PRESENT | VMM_PAGE_WRITABLE;
+    if ((pde & VMM_PAGE_USER) != 0) {
+        pd_flags |= VMM_PAGE_USER;
+    }
+    pd[index] = ((uint64_t)(uintptr_t)pt & VMM_PHYS_MASK) | pd_flags;
+    return 1;
 }
 
 static int vmm_get_or_create_next_table(
@@ -126,12 +168,27 @@ static int vmm_walk_to_pt(
 
     if (create) {
         if (!vmm_get_or_create_next_table(pd, l2, &pt)) {
-            return 0;
+            if ((pd[l2] & VMM_PAGE_PRESENT) != 0 &&
+                (pd[l2] & VMM_PAGE_SIZE) != 0 &&
+                vmm_split_large_pd_entry(pd, l2)) {
+                if (!vmm_get_or_create_next_table(pd, l2, &pt)) {
+                    return 0;
+                }
+            } else {
+                return 0;
+            }
         }
     } else {
-        if ((pd[l2] & VMM_PAGE_PRESENT) == 0 || (pd[l2] & VMM_PAGE_SIZE) != 0) {
+        if ((pd[l2] & VMM_PAGE_PRESENT) == 0) {
             return 0;
         }
+
+        if ((pd[l2] & VMM_PAGE_SIZE) != 0) {
+            if (!vmm_split_large_pd_entry(pd, l2)) {
+                return 0;
+            }
+        }
+
         pt = vmm_entry_to_table(pd[l2]);
     }
 

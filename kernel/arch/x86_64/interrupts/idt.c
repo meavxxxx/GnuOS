@@ -72,7 +72,14 @@ DEFINE_ISR_ERR(isr_invalid_tss, 10)
 DEFINE_ISR_ERR(isr_segment_not_present, 11)
 DEFINE_ISR_ERR(isr_stack_segment_fault, 12)
 DEFINE_ISR_ERR(isr_general_protection_fault, 13)
-DEFINE_ISR_ERR(isr_page_fault, 14)
+__attribute__((interrupt)) static void isr_page_fault(
+    struct interrupt_frame *f,
+    uint64_t error_code)
+{
+    uint64_t cr2 = 0;
+    __asm__ volatile("mov %%cr2, %0" : "=r"(cr2));
+    kpanic_page_fault(cr2, error_code, f);
+}
 DEFINE_ISR_NOERR(isr_reserved_15, 15)
 DEFINE_ISR_NOERR(isr_x87_floating_point, 16)
 DEFINE_ISR_ERR(isr_alignment_check, 17)
@@ -142,4 +149,3 @@ void x86_64_idt_init(void)
     idt_load(&g_idtr);
     serial_write("GNU OS: IDT initialized for vectors 0..31.\n");
 }
-

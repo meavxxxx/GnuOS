@@ -73,6 +73,7 @@ void kmain(uint64_t boot_magic, uint64_t boot_info_addr)
     uint64_t kernel_size = 0;
     uint64_t translated = 0;
     uint64_t test_virt = 0;
+    uint64_t split_test_virt = 0x0000000000200000ULL;
     int have_mmap = 0;
 
     vga_clear(0x07);
@@ -144,6 +145,34 @@ void kmain(uint64_t boot_magic, uint64_t boot_info_addr)
         }
     } else {
         serial_write("GNU OS: VMM allocation test failed.\n");
+    }
+
+    void *split_page = pmm_alloc_page();
+    if (split_page) {
+        uint64_t split_phys = (uint64_t)(uintptr_t)split_page;
+        int split_ok = vmm_unmap_page(split_test_virt) &&
+            vmm_map_page(split_test_virt, split_phys, VMM_MAP_WRITABLE);
+
+        if (split_ok) {
+            volatile uint64_t *probe = (volatile uint64_t *)(uintptr_t)split_test_virt;
+            *probe = 0x53504C4954564D4DULL;
+
+            if (vmm_translate(split_test_virt, &translated)) {
+                serial_write("GNU OS: VMM split/remap ");
+                serial_write_hex64(split_test_virt);
+                serial_write(" -> ");
+                serial_write_hex64(translated);
+                serial_write("\n");
+            }
+        } else {
+            serial_write("GNU OS: VMM split/remap test failed.\n");
+        }
+
+        (void)vmm_unmap_page(split_test_virt);
+        (void)vmm_map_page(split_test_virt, split_test_virt, VMM_MAP_WRITABLE);
+        pmm_free_page(split_page);
+    } else {
+        serial_write("GNU OS: no free page for VMM split test.\n");
     }
 
 #if 0
