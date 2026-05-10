@@ -22,6 +22,45 @@ static uint8_t g_vga_col;
 extern uint8_t __kernel_start;
 extern uint8_t __kernel_end;
 
+typedef struct {
+    const char *name;
+    uint32_t period_ticks;
+    uint64_t iterations;
+} demo_worker_arg_t;
+
+static demo_worker_arg_t g_worker_a = {
+    .name = "worker-a",
+    .period_ticks = 20U,
+    .iterations = 0,
+};
+
+static demo_worker_arg_t g_worker_b = {
+    .name = "worker-b",
+    .period_ticks = 35U,
+    .iterations = 0,
+};
+
+static void demo_worker_entry(void *arg)
+{
+    demo_worker_arg_t *worker = (demo_worker_arg_t *)arg;
+    uint64_t last_tick = pit_ticks();
+
+    for (;;) {
+        while ((pit_ticks() - last_tick) < worker->period_ticks) {
+            __asm__ volatile("hlt");
+        }
+
+        last_tick = pit_ticks();
+        worker->iterations++;
+        kprintf(
+            "GNU OS: %s iteration=%u, total_ticks=%u\n",
+            worker->name,
+            worker->iterations,
+            sched_total_ticks());
+        sched_yield();
+    }
+}
+
 static uint16_t vga_entry(char c, uint8_t color)
 {
     return (uint16_t)c | ((uint16_t)color << 8U);
@@ -81,6 +120,8 @@ void kmain(uint64_t boot_magic, uint64_t boot_info_addr)
     uint64_t split_test_virt = 0x0000000000200000ULL;
     uint64_t ticks_before = 0;
     task_t *current_task = NULL;
+    task_t *worker_task_a = NULL;
+    task_t *worker_task_b = NULL;
     int have_mmap = 0;
 
     vga_clear(0x07);
@@ -115,7 +156,11 @@ void kmain(uint64_t boot_magic, uint64_t boot_info_addr)
     if (!sched_create_idle_task()) {
         kpanic("failed to create idle task");
     }
-    sched_tick();
+    worker_task_a = sched_create_kernel_task("worker-a", demo_worker_entry, &g_worker_a);
+    worker_task_b = sched_create_kernel_task("worker-b", demo_worker_entry, &g_worker_b);
+    if (!worker_task_a || !worker_task_b) {
+        kpanic("failed to create demo worker tasks");
+    }
 
     pic_init(PIC_IRQ_BASE, (uint8_t)(PIC_IRQ_BASE + 8U));
     for (uint8_t irq = 0; irq < 16U; irq++) {
@@ -220,6 +265,8 @@ void kmain(uint64_t boot_magic, uint64_t boot_info_addr)
 #endif
 
     for (;;) {
-        __asm__ volatile("hlt");
+        if (!sched_run()) {
+            __asm__ volatile("hlt");
+        }
     }
 }
