@@ -36,6 +36,7 @@ KERNEL_C_SOURCES := \
 	kernel/drivers/char/ps2_keyboard.c \
 	kernel/drivers/pci.c \
 	kernel/drivers/dma.c \
+	kernel/ipc/ipc.c \
 	kernel/mm/pmm.c \
 	kernel/mm/vmm.c \
 	kernel/sched/sched.c \

@@ -6,6 +6,7 @@
 #include <gnuos/dma.h>
 #include <gnuos/mm.h>
 #include <gnuos/multiboot2.h>
+#include <gnuos/ipc.h>
 #include <gnuos/panic.h>
 #include <gnuos/pci.h>
 #include <gnuos/pic.h>
@@ -248,6 +249,10 @@ void kmain(uint64_t boot_magic, uint64_t boot_info_addr)
     uint64_t test_virt = 0;
     uint64_t split_test_virt = 0x0000000000200000ULL;
     uint64_t ticks_before = 0;
+    int ipc_boot_channel = -1;
+    char ipc_recv_buffer[IPC_MESSAGE_DATA_MAX + 1U];
+    uint16_t ipc_recv_size = 0U;
+    uint64_t ipc_sender_tid = 0U;
     task_t *current_task = NULL;
     task_t *rcu_reader_task = NULL;
     task_t *rcu_updater_task = NULL;
@@ -311,6 +316,7 @@ void kmain(uint64_t boot_magic, uint64_t boot_info_addr)
     ps2_keyboard_init();
     pci_init();
     dma_init();
+    ipc_init();
     pic_clear_mask(0U);
     pic_clear_mask(1U);
     pit_init(100U);
@@ -336,6 +342,31 @@ void kmain(uint64_t boot_magic, uint64_t boot_info_addr)
         serial_write("GNU OS: current task tid: (null)\n");
     }
     serial_write("GNU OS: IRQ0 timer and IRQ1 keyboard unmasked; interrupts enabled.\n");
+
+    ipc_boot_channel = ipc_channel_create("boot-log");
+    if (ipc_boot_channel >= 0) {
+        static const char ipc_boot_message[] = "ipc online";
+
+        if (ipc_channel_send(
+                ipc_boot_channel,
+                ipc_boot_message,
+                (uint16_t)(sizeof(ipc_boot_message) - 1U),
+                0U) == 0) {
+            if (ipc_channel_recv(
+                    ipc_boot_channel,
+                    ipc_recv_buffer,
+                    IPC_MESSAGE_DATA_MAX,
+                    &ipc_recv_size,
+                    &ipc_sender_tid) == 0) {
+                ipc_recv_buffer[ipc_recv_size] = '\0';
+                kprintf(
+                    "GNU OS: IPC channel=boot-log message='%s' sender_tid=%u channels=%u\n",
+                    ipc_recv_buffer,
+                    ipc_sender_tid,
+                    ipc_channel_count());
+            }
+        }
+    }
 
     void *page = pmm_alloc_page();
     if (page) {
