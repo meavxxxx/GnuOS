@@ -72,8 +72,7 @@ void kmain(uint64_t boot_magic, uint64_t boot_info_addr)
     uint64_t kernel_end = 0;
     uint64_t kernel_size = 0;
     uint64_t translated = 0;
-    uint64_t test_phys = 0;
-    uint64_t test_virt = 0x40000000ULL;
+    uint64_t test_virt = 0;
     int have_mmap = 0;
 
     vga_clear(0x07);
@@ -119,21 +118,23 @@ void kmain(uint64_t boot_magic, uint64_t boot_info_addr)
     serial_write("\n");
 
     void *page = pmm_alloc_page();
-    test_phys = (uint64_t)(uintptr_t)page;
     serial_write("GNU OS: PMM first allocated page: ");
     if (page) {
-        serial_write_hex64(test_phys);
+        serial_write_hex64((uint64_t)(uintptr_t)page);
     } else {
         serial_write("(null)");
     }
     serial_write("\n");
 
-    if (page && vmm_map_page(test_virt, test_phys, VMM_MAP_WRITABLE)) {
+    void *heap_page = vmm_alloc_kernel_pages(1, VMM_MAP_WRITABLE);
+    test_virt = (uint64_t)(uintptr_t)heap_page;
+
+    if (heap_page) {
         volatile uint64_t *probe = (volatile uint64_t *)(uintptr_t)test_virt;
         *probe = 0x474E554F53564D4DULL;
 
         if (vmm_translate(test_virt, &translated)) {
-            serial_write("GNU OS: VMM mapped/translated ");
+            serial_write("GNU OS: VMM allocated/mapped ");
             serial_write_hex64(test_virt);
             serial_write(" -> ");
             serial_write_hex64(translated);
@@ -141,10 +142,8 @@ void kmain(uint64_t boot_magic, uint64_t boot_info_addr)
         } else {
             serial_write("GNU OS: VMM translate failed for test mapping.\n");
         }
-
-        (void)vmm_unmap_page(test_virt);
     } else {
-        serial_write("GNU OS: VMM map test skipped/failed.\n");
+        serial_write("GNU OS: VMM allocation test failed.\n");
     }
 
 #if 0

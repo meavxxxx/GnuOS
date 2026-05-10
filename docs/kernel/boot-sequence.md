@@ -7,6 +7,7 @@
 5. Multiboot memory map is parsed and used to seed a bootstrap PMM allocator.
 6. Kernel memory range is reserved in PMM to avoid self-overwrite.
 7. VMM bootstrap attaches to current PML4 (`CR3`) and supports 4K map/unmap.
-8. CPU enters idle loop with `hlt`.
+8. Kernel virtual allocator maps pages from PMM in a dedicated VA region.
+9. CPU enters idle loop with `hlt`.
 
 This is intentionally minimal and acts as phase-0/1 scaffolding.

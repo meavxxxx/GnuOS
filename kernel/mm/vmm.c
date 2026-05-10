@@ -13,8 +13,10 @@
 #define VMM_PAGE_SIZE 0x080ULL
 #define VMM_PHYS_MASK 0x000FFFFFFFFFF000ULL
 #define VMM_PAGE_OFFSET_MASK 0xFFFULL
+#define VMM_KERNEL_HEAP_BASE 0x0000000040000000ULL
 
 static uint64_t *g_pml4;
+static uint64_t g_kernel_heap_next = VMM_KERNEL_HEAP_BASE;
 
 static uint16_t vmm_pml4_index(uint64_t virt_addr)
 {
@@ -255,3 +257,50 @@ int vmm_translate(uint64_t virt_addr, uint64_t *out_phys_addr)
     return 1;
 }
 
+void *vmm_alloc_kernel_pages(uint64_t page_count, uint64_t flags)
+{
+    if (page_count == 0) {
+        return NULL;
+    }
+
+    uint64_t start = g_kernel_heap_next;
+    uint64_t requested_bytes = page_count * MM_PAGE_SIZE;
+    if (requested_bytes / MM_PAGE_SIZE != page_count) {
+        return NULL;
+    }
+
+    if (start > UINT64_MAX - requested_bytes) {
+        return NULL;
+    }
+
+    uint64_t expected_end = start + requested_bytes;
+    uint64_t current = start;
+
+    for (uint64_t i = 0; i < page_count; i++) {
+        void *phys_page = pmm_alloc_page();
+        if (!phys_page) {
+            break;
+        }
+
+        if (!vmm_map_page(current, (uint64_t)(uintptr_t)phys_page, flags | VMM_MAP_WRITABLE)) {
+            pmm_free_page(phys_page);
+            break;
+        }
+
+        current += MM_PAGE_SIZE;
+    }
+
+    if (current != expected_end) {
+        for (uint64_t addr = start; addr < current; addr += MM_PAGE_SIZE) {
+            uint64_t phys = 0;
+            if (vmm_translate(addr, &phys)) {
+                (void)vmm_unmap_page(addr);
+                pmm_free_page((void *)(uintptr_t)(phys & VMM_PHYS_MASK));
+            }
+        }
+        return NULL;
+    }
+
+    g_kernel_heap_next = current;
+    return (void *)(uintptr_t)start;
+}
