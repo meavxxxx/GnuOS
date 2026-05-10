@@ -12,6 +12,7 @@ struct interrupt_frame {
 };
 
 void x86_64_idt_init(void);
+void x86_64_interrupts_enable(void);
+void x86_64_interrupts_disable(void);
 
 #endif
-

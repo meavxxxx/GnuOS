@@ -2,11 +2,14 @@
 
 #include <gnuos/interrupts.h>
 #include <gnuos/panic.h>
+#include <gnuos/pic.h>
+#include <gnuos/pit.h>
 #include <gnuos/serial.h>
 
 #define IDT_ENTRIES 256U
 #define KERNEL_CODE_SELECTOR 0x08U
 #define IDT_INT_GATE 0x8EU
+#define IRQ_BASE PIC_IRQ_BASE
 
 typedef struct {
     uint16_t offset_low;
@@ -98,6 +101,36 @@ DEFINE_ISR_ERR(isr_vmm_communication, 29)
 DEFINE_ISR_ERR(isr_security_exception, 30)
 DEFINE_ISR_NOERR(isr_reserved_31, 31)
 
+__attribute__((interrupt)) static void isr_irq0_timer(struct interrupt_frame *f)
+{
+    (void)f;
+    pit_on_irq();
+    pic_send_eoi(0);
+}
+
+#define DEFINE_IRQ_ISR(name, irq_line)                                            \
+    __attribute__((interrupt)) static void name(struct interrupt_frame *f)        \
+    {                                                                              \
+        (void)f;                                                                   \
+        pic_send_eoi((irq_line));                                                  \
+    }
+
+DEFINE_IRQ_ISR(isr_irq1, 1)
+DEFINE_IRQ_ISR(isr_irq2, 2)
+DEFINE_IRQ_ISR(isr_irq3, 3)
+DEFINE_IRQ_ISR(isr_irq4, 4)
+DEFINE_IRQ_ISR(isr_irq5, 5)
+DEFINE_IRQ_ISR(isr_irq6, 6)
+DEFINE_IRQ_ISR(isr_irq7, 7)
+DEFINE_IRQ_ISR(isr_irq8, 8)
+DEFINE_IRQ_ISR(isr_irq9, 9)
+DEFINE_IRQ_ISR(isr_irq10, 10)
+DEFINE_IRQ_ISR(isr_irq11, 11)
+DEFINE_IRQ_ISR(isr_irq12, 12)
+DEFINE_IRQ_ISR(isr_irq13, 13)
+DEFINE_IRQ_ISR(isr_irq14, 14)
+DEFINE_IRQ_ISR(isr_irq15, 15)
+
 void x86_64_idt_init(void)
 {
     for (uint16_t i = 0; i < IDT_ENTRIES; i++) {
@@ -143,9 +176,36 @@ void x86_64_idt_init(void)
     idt_set_gate(30, (uintptr_t)isr_security_exception);
     idt_set_gate(31, (uintptr_t)isr_reserved_31);
 
+    idt_set_gate((uint8_t)(IRQ_BASE + 0U), (uintptr_t)isr_irq0_timer);
+    idt_set_gate((uint8_t)(IRQ_BASE + 1U), (uintptr_t)isr_irq1);
+    idt_set_gate((uint8_t)(IRQ_BASE + 2U), (uintptr_t)isr_irq2);
+    idt_set_gate((uint8_t)(IRQ_BASE + 3U), (uintptr_t)isr_irq3);
+    idt_set_gate((uint8_t)(IRQ_BASE + 4U), (uintptr_t)isr_irq4);
+    idt_set_gate((uint8_t)(IRQ_BASE + 5U), (uintptr_t)isr_irq5);
+    idt_set_gate((uint8_t)(IRQ_BASE + 6U), (uintptr_t)isr_irq6);
+    idt_set_gate((uint8_t)(IRQ_BASE + 7U), (uintptr_t)isr_irq7);
+    idt_set_gate((uint8_t)(IRQ_BASE + 8U), (uintptr_t)isr_irq8);
+    idt_set_gate((uint8_t)(IRQ_BASE + 9U), (uintptr_t)isr_irq9);
+    idt_set_gate((uint8_t)(IRQ_BASE + 10U), (uintptr_t)isr_irq10);
+    idt_set_gate((uint8_t)(IRQ_BASE + 11U), (uintptr_t)isr_irq11);
+    idt_set_gate((uint8_t)(IRQ_BASE + 12U), (uintptr_t)isr_irq12);
+    idt_set_gate((uint8_t)(IRQ_BASE + 13U), (uintptr_t)isr_irq13);
+    idt_set_gate((uint8_t)(IRQ_BASE + 14U), (uintptr_t)isr_irq14);
+    idt_set_gate((uint8_t)(IRQ_BASE + 15U), (uintptr_t)isr_irq15);
+
     g_idtr.limit = (uint16_t)(sizeof(g_idt) - 1U);
     g_idtr.base = (uint64_t)(uintptr_t)&g_idt[0];
 
     idt_load(&g_idtr);
     serial_write("GNU OS: IDT initialized for vectors 0..31.\n");
+}
+
+void x86_64_interrupts_enable(void)
+{
+    __asm__ volatile("sti");
+}
+
+void x86_64_interrupts_disable(void)
+{
+    __asm__ volatile("cli");
 }

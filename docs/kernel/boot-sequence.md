@@ -10,6 +10,8 @@
 8. Kernel virtual allocator maps pages from PMM in a dedicated VA region.
 9. Large (2 MiB) bootstrap mappings can be split into 4K tables on demand.
 10. Scheduler bootstrap initializes ready queue and creates idle task.
-11. CPU enters idle loop with `hlt`.
+11. PIC is remapped, PIT timer is configured, and IRQ0 is unmasked.
+12. Hardware interrupts are enabled and timer ticks reach scheduler.
+13. CPU enters idle loop with `hlt`.
 
 This is intentionally minimal and acts as phase-0/1 scaffolding.

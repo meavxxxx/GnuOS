@@ -5,6 +5,8 @@
 #include <gnuos/mm.h>
 #include <gnuos/multiboot2.h>
 #include <gnuos/panic.h>
+#include <gnuos/pic.h>
+#include <gnuos/pit.h>
 #include <gnuos/sched.h>
 #include <gnuos/serial.h>
 #include <gnuos/vmm.h>
@@ -76,6 +78,7 @@ void kmain(uint64_t boot_magic, uint64_t boot_info_addr)
     uint64_t translated = 0;
     uint64_t test_virt = 0;
     uint64_t split_test_virt = 0x0000000000200000ULL;
+    uint64_t ticks_before = 0;
     task_t *current_task = NULL;
     int have_mmap = 0;
 
@@ -113,6 +116,14 @@ void kmain(uint64_t boot_magic, uint64_t boot_info_addr)
     }
     sched_tick();
 
+    pic_init(PIC_IRQ_BASE, (uint8_t)(PIC_IRQ_BASE + 8U));
+    for (uint8_t irq = 0; irq < 16U; irq++) {
+        pic_set_mask(irq);
+    }
+    pic_clear_mask(0U);
+    pit_init(100U);
+    x86_64_interrupts_enable();
+
     vga_write("GNU OS kernel bootstrap\n", color);
     vga_write("Phase 1.5 in progress: scheduler bootstrap online.\n", 0x0F);
 
@@ -137,6 +148,7 @@ void kmain(uint64_t boot_magic, uint64_t boot_info_addr)
         serial_write("(null)");
     }
     serial_write("\n");
+    serial_write("GNU OS: IRQ0 timer unmasked and interrupts enabled.\n");
 
     void *page = pmm_alloc_page();
     serial_write("GNU OS: PMM first allocated page: ");
@@ -194,6 +206,15 @@ void kmain(uint64_t boot_magic, uint64_t boot_info_addr)
     } else {
         serial_write("GNU OS: no free page for VMM split test.\n");
     }
+
+    ticks_before = pit_ticks();
+    while (pit_ticks() == ticks_before) {
+        __asm__ volatile("hlt");
+    }
+
+    serial_write("GNU OS: timer interrupt path active, ticks=");
+    serial_write_hex64(pit_ticks());
+    serial_write("\n");
 
 #if 0
     /* Optional bring-up test: should trigger #DE and halt in kpanic. */

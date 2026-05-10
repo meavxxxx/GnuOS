@@ -1,18 +1,8 @@
 #include <stdint.h>
 
+#include <gnuos/io.h>
+
 #define COM1_PORT 0x3F8
-
-static inline void io_out8(uint16_t port, uint8_t value)
-{
-    __asm__ volatile("outb %0, %1" : : "a"(value), "Nd"(port));
-}
-
-static inline uint8_t io_in8(uint16_t port)
-{
-    uint8_t value;
-    __asm__ volatile("inb %1, %0" : "=a"(value) : "Nd"(port));
-    return value;
-}
 
 void serial_init(void)
 {

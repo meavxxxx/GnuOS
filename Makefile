@@ -7,6 +7,8 @@ TARGET ?= x86_64-elf
 QEMU_SYSTEM ?= qemu-system-x86_64
 KERNEL_LINKER_SCRIPT := kernel/arch/x86_64/linker.ld
 ARCH_C_SOURCES := kernel/arch/x86_64/serial.c
+ARCH_C_SOURCES += kernel/arch/x86_64/interrupts/pic.c
+ARCH_C_SOURCES += kernel/arch/x86_64/timer/pit.c
 ARCH_ASM_SOURCES := kernel/arch/x86_64/boot/multiboot2_header.S \
 	kernel/arch/x86_64/boot/entry.S
 else
