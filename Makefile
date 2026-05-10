@@ -23,10 +23,13 @@ KERNEL_ELF := $(BUILD_DIR)/kernel.elf
 ISO_IMAGE := $(BUILD_DIR)/gnuos-$(ARCH).iso
 
 COMMON_CFLAGS := -std=$(CSTD) -O2 -g -ffreestanding -fno-stack-protector -fno-pie \
-	-mno-red-zone -Wall -Wextra -Wpedantic -Iinclude -Ikernel/include
-COMMON_LDFLAGS := -nostdlib -Wl,-n,-T,$(KERNEL_LINKER_SCRIPT)
+	-mno-red-zone -mgeneral-regs-only -Wall -Wextra -Wpedantic -Iinclude -Ikernel/include
+COMMON_LDFLAGS := -nostdlib -no-pie -Wl,-n,-T,$(KERNEL_LINKER_SCRIPT)
 
-KERNEL_C_SOURCES := kernel/init/kmain.c
+KERNEL_C_SOURCES := \
+	kernel/init/kmain.c \
+	kernel/init/panic.c \
+	kernel/arch/x86_64/interrupts/idt.c
 
 KERNEL_OBJECTS := \
 	$(patsubst %.c,$(BUILD_DIR)/%.o,$(KERNEL_C_SOURCES) $(ARCH_C_SOURCES)) \

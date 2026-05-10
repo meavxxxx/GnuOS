@@ -1,5 +1,6 @@
 #include <stdint.h>
 
+#include <gnuos/interrupts.h>
 #include <gnuos/serial.h>
 
 #define VGA_WIDTH 80
@@ -61,15 +62,20 @@ void kmain(void)
 
     vga_clear(0x07);
     serial_init();
+    x86_64_idt_init();
 
     vga_write("GNU OS kernel bootstrap\n", color);
-    vga_write("Phase 0 complete: build skeleton is alive.\n", 0x0F);
+    vga_write("Phase 1.2 in progress: IDT + exception handlers.\n", 0x0F);
 
     serial_write("GNU OS: serial console initialized.\n");
     serial_write("GNU OS: kernel bootstrap reached kmain().\n");
+
+#if 0
+    /* Optional bring-up test: should trigger #DE and halt in kpanic. */
+    __asm__ volatile("xor %rdx, %rdx; div %rdx");
+#endif
 
     for (;;) {
         __asm__ volatile("hlt");
     }
 }
-

@@ -30,6 +30,7 @@ PACKAGES=(
     gcc
     git
     grub-common
+    grub2-common
     grub-pc-bin
     libgmp3-dev
     libisl-dev
@@ -72,4 +73,3 @@ EOF
 
 echo "[wsl-bootstrap] wrote config.mk (TARGET=$TARGET_VALUE)"
 echo "[wsl-bootstrap] done"
-

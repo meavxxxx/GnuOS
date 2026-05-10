@@ -19,3 +19,4 @@ header_start:
     .long 8
 header_end:
 
+.section .note.GNU-stack, "", @progbits

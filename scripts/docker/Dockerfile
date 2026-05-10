@@ -8,7 +8,10 @@ RUN apt-get update && \
     flex \
     ca-certificates \
     curl \
+    grub-common \
+    grub2-common \
     grub-pc-bin \
+    mtools \
     xorriso \
     qemu-system-x86 \
     make \
@@ -19,4 +22,3 @@ RUN apt-get update && \
     rm -rf /var/lib/apt/lists/*
 
 WORKDIR /src
-
