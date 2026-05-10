@@ -19,6 +19,7 @@
 # WSL
 .\scripts\dev\wsl-make.ps1 kernel
 .\scripts\dev\wsl-make.ps1 run
+.\scripts\dev\wsl-run-kernel.ps1
 
 # Docker
 .\scripts\dev\docker-make.ps1 -RebuildImage kernel
