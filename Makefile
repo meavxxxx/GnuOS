@@ -40,6 +40,7 @@ KERNEL_C_SOURCES := \
 	kernel/lib/spinlock.c \
 	kernel/lib/mutex.c \
 	kernel/lib/rwlock.c \
+	kernel/lib/rcu.c \
 	kernel/lib/printk.c \
 	kernel/arch/x86_64/boot/multiboot2.c
 

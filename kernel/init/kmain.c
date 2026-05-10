@@ -8,10 +8,11 @@
 #include <gnuos/pic.h>
 #include <gnuos/pit.h>
 #include <gnuos/printk.h>
+#include <gnuos/rcu.h>
 #include <gnuos/sched.h>
 #include <gnuos/serial.h>
+#include <gnuos/spinlock.h>
 #include <gnuos/vmm.h>
-#include <gnuos/workqueue.h>
 
 #define VGA_WIDTH 80
 #define VGA_HEIGHT 25
@@ -26,79 +27,162 @@ extern uint8_t __kernel_end;
 typedef struct {
     const char *name;
     uint32_t period_ticks;
-    uint64_t produced;
-    uint64_t dropped;
-} demo_producer_arg_t;
+    uint64_t reads;
+} demo_rcu_reader_arg_t;
 
 typedef struct {
     const char *name;
-    uint64_t handled;
-} demo_worker_arg_t;
+    uint32_t period_ticks;
+    uint64_t published;
+    uint64_t dropped;
+} demo_rcu_updater_arg_t;
 
-static work_queue_t g_demo_workqueue;
+typedef struct {
+    rcu_head_t rcu_head;
+    uint64_t generation;
+    uint8_t in_use;
+} demo_rcu_node_t;
 
-static demo_worker_arg_t g_demo_worker = {
-    .name = "wq-worker",
-    .handled = 0U,
+#define DEMO_RCU_POOL_SIZE 32U
+
+static spinlock_t g_demo_rcu_pool_lock;
+static demo_rcu_node_t g_demo_rcu_pool[DEMO_RCU_POOL_SIZE];
+static demo_rcu_node_t *g_demo_rcu_current;
+
+static demo_rcu_reader_arg_t g_demo_rcu_reader = {
+    .name = "rcu-reader",
+    .period_ticks = 20U,
+    .reads = 0U,
 };
 
-static demo_producer_arg_t g_demo_producer = {
-    .name = "wq-producer",
-    .period_ticks = 30U,
-    .produced = 0U,
+static demo_rcu_updater_arg_t g_demo_rcu_updater = {
+    .name = "rcu-updater",
+    .period_ticks = 60U,
+    .published = 0U,
     .dropped = 0U,
 };
 
-static void demo_work_handler(void *arg)
+static void demo_rcu_pool_init(void)
 {
-    uint64_t token = (uint64_t)(uintptr_t)arg;
-    g_demo_worker.handled++;
-    kprintf(
-        "GNU OS: %s handled id=%u, handled=%u, pending=%u\n",
-        g_demo_worker.name,
-        token,
-        g_demo_worker.handled,
-        workqueue_pending(&g_demo_workqueue));
-}
-
-static void demo_workqueue_worker_entry(void *arg)
-{
-    (void)arg;
-    for (;;) {
-        (void)workqueue_execute_one(&g_demo_workqueue, 1);
-        sched_yield();
+    spinlock_init(&g_demo_rcu_pool_lock);
+    for (uint16_t i = 0; i < DEMO_RCU_POOL_SIZE; i++) {
+        g_demo_rcu_pool[i].rcu_head.next = NULL;
+        g_demo_rcu_pool[i].rcu_head.func = NULL;
+        g_demo_rcu_pool[i].generation = 0;
+        g_demo_rcu_pool[i].in_use = 0;
     }
+    g_demo_rcu_current = NULL;
 }
 
-static void demo_workqueue_producer_entry(void *arg)
+static demo_rcu_node_t *demo_rcu_alloc_node(void)
 {
-    demo_producer_arg_t *producer = (demo_producer_arg_t *)arg;
+    demo_rcu_node_t *node = NULL;
+
+    spinlock_lock(&g_demo_rcu_pool_lock);
+    for (uint16_t i = 0; i < DEMO_RCU_POOL_SIZE; i++) {
+        if (g_demo_rcu_pool[i].in_use == 0U) {
+            g_demo_rcu_pool[i].in_use = 1U;
+            node = &g_demo_rcu_pool[i];
+            break;
+        }
+    }
+    spinlock_unlock(&g_demo_rcu_pool_lock);
+
+    return node;
+}
+
+static void demo_rcu_reclaim_callback(rcu_head_t *head)
+{
+    demo_rcu_node_t *node = rcu_container_of(head, demo_rcu_node_t, rcu_head);
+
+    spinlock_lock(&g_demo_rcu_pool_lock);
+    node->in_use = 0U;
+    spinlock_unlock(&g_demo_rcu_pool_lock);
+
+    kprintf(
+        "GNU OS: rcu reclaimed generation=%u completed=%u\n",
+        node->generation,
+        rcu_callbacks_completed() + 1U);
+}
+
+static void demo_rcu_reader_entry(void *arg)
+{
+    demo_rcu_reader_arg_t *reader = (demo_rcu_reader_arg_t *)arg;
     uint64_t last_tick = pit_ticks();
 
     for (;;) {
-        while ((pit_ticks() - last_tick) < producer->period_ticks) {
+        while ((pit_ticks() - last_tick) < reader->period_ticks) {
             __asm__ volatile("hlt");
         }
 
         last_tick = pit_ticks();
-        uint64_t token = producer->produced + producer->dropped + 1U;
-        int queued = workqueue_submit(
-            &g_demo_workqueue,
-            demo_work_handler,
-            (void *)(uintptr_t)token);
-        if (queued) {
-            producer->produced++;
-        } else {
-            producer->dropped++;
+        rcu_read_lock();
+        demo_rcu_node_t *current = rcu_dereference(g_demo_rcu_current);
+        uint64_t generation = current ? current->generation : 0U;
+        rcu_read_unlock();
+
+        reader->reads++;
+        if ((reader->reads % 4U) == 0U) {
+            kprintf(
+                "GNU OS: %s reads=%u generation=%u readers=%u\n",
+                reader->name,
+                reader->reads,
+                generation,
+                rcu_reader_count());
+        }
+
+        sched_yield();
+    }
+}
+
+static void demo_rcu_updater_entry(void *arg)
+{
+    demo_rcu_updater_arg_t *updater = (demo_rcu_updater_arg_t *)arg;
+    uint64_t last_tick = pit_ticks();
+
+    for (;;) {
+        while ((pit_ticks() - last_tick) < updater->period_ticks) {
+            __asm__ volatile("hlt");
+        }
+
+        last_tick = pit_ticks();
+        demo_rcu_node_t *next = demo_rcu_alloc_node();
+        if (!next) {
+            updater->dropped++;
+            kprintf(
+                "GNU OS: %s pool exhausted dropped=%u\n",
+                updater->name,
+                updater->dropped);
+            sched_yield();
+            continue;
+        }
+
+        next->generation = updater->published + updater->dropped + 1U;
+        demo_rcu_node_t *old = rcu_dereference(g_demo_rcu_current);
+        rcu_assign_pointer(g_demo_rcu_current, next);
+        updater->published++;
+
+        if (old) {
+            call_rcu(&old->rcu_head, demo_rcu_reclaim_callback);
         }
 
         kprintf(
-            "GNU OS: %s queued=%u dropped=%u pending=%u ticks=%u\n",
-            producer->name,
-            producer->produced,
-            producer->dropped,
-            workqueue_pending(&g_demo_workqueue),
-            sched_total_ticks());
+            "GNU OS: %s published=%u generation=%u queued=%u completed=%u\n",
+            updater->name,
+            updater->published,
+            next->generation,
+            rcu_callbacks_queued(),
+            rcu_callbacks_completed());
+        sched_yield();
+    }
+}
+
+static void demo_rcu_reclaimer_entry(void *arg)
+{
+    (void)arg;
+
+    for (;;) {
+        (void)rcu_process_callbacks(1);
         sched_yield();
     }
 }
@@ -162,8 +246,9 @@ void kmain(uint64_t boot_magic, uint64_t boot_info_addr)
     uint64_t split_test_virt = 0x0000000000200000ULL;
     uint64_t ticks_before = 0;
     task_t *current_task = NULL;
-    task_t *worker_task = NULL;
-    task_t *producer_task = NULL;
+    task_t *rcu_reader_task = NULL;
+    task_t *rcu_updater_task = NULL;
+    task_t *rcu_reclaimer_task = NULL;
     int have_mmap = 0;
 
     vga_clear(0x07);
@@ -195,15 +280,25 @@ void kmain(uint64_t boot_magic, uint64_t boot_info_addr)
     }
 
     sched_init();
-    workqueue_init(&g_demo_workqueue, "demo");
+    rcu_init();
+    demo_rcu_pool_init();
+    demo_rcu_node_t *initial_node = demo_rcu_alloc_node();
+    if (!initial_node) {
+        kpanic("failed to allocate initial rcu node");
+    }
+    initial_node->generation = 1U;
+    rcu_assign_pointer(g_demo_rcu_current, initial_node);
+    g_demo_rcu_updater.published = 1U;
     if (!sched_create_idle_task()) {
         kpanic("failed to create idle task");
     }
-    worker_task = sched_create_kernel_task("wq-worker", demo_workqueue_worker_entry, NULL);
-    producer_task =
-        sched_create_kernel_task("wq-producer", demo_workqueue_producer_entry, &g_demo_producer);
-    if (!worker_task || !producer_task) {
-        kpanic("failed to create workqueue demo tasks");
+    rcu_reader_task =
+        sched_create_kernel_task("rcu-reader", demo_rcu_reader_entry, &g_demo_rcu_reader);
+    rcu_updater_task =
+        sched_create_kernel_task("rcu-updater", demo_rcu_updater_entry, &g_demo_rcu_updater);
+    rcu_reclaimer_task = sched_create_kernel_task("rcu-reclaimer", demo_rcu_reclaimer_entry, NULL);
+    if (!rcu_reader_task || !rcu_updater_task || !rcu_reclaimer_task) {
+        kpanic("failed to create rcu demo tasks");
     }
 
     pic_init(PIC_IRQ_BASE, (uint8_t)(PIC_IRQ_BASE + 8U));

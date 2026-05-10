@@ -203,7 +203,7 @@
 - [x] Атомарные операции (на базе `__atomic_*`)
 - [x] Очереди ожидания (wait queues)
 - [x] Механизм work queues для отложенных задач
-- [ ] Поддержка RCU (Read-Copy-Update)
+- [x] Поддержка RCU (Read-Copy-Update)
 
 #### 1.8 Микроядерный IPC
 
