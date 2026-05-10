@@ -1,6 +1,7 @@
 #include <stdint.h>
 
 #include <gnuos/interrupts.h>
+#include <gnuos/keyboard.h>
 #include <gnuos/panic.h>
 #include <gnuos/pic.h>
 #include <gnuos/pit.h>
@@ -108,6 +109,13 @@ __attribute__((interrupt)) static void isr_irq0_timer(struct interrupt_frame *f)
     pic_send_eoi(0);
 }
 
+__attribute__((interrupt)) static void isr_irq1_keyboard(struct interrupt_frame *f)
+{
+    (void)f;
+    ps2_keyboard_on_irq();
+    pic_send_eoi(1);
+}
+
 #define DEFINE_IRQ_ISR(name, irq_line)                                            \
     __attribute__((interrupt)) static void name(struct interrupt_frame *f)        \
     {                                                                              \
@@ -115,7 +123,6 @@ __attribute__((interrupt)) static void isr_irq0_timer(struct interrupt_frame *f)
         pic_send_eoi((irq_line));                                                  \
     }
 
-DEFINE_IRQ_ISR(isr_irq1, 1)
 DEFINE_IRQ_ISR(isr_irq2, 2)
 DEFINE_IRQ_ISR(isr_irq3, 3)
 DEFINE_IRQ_ISR(isr_irq4, 4)
@@ -177,7 +184,7 @@ void x86_64_idt_init(void)
     idt_set_gate(31, (uintptr_t)isr_reserved_31);
 
     idt_set_gate((uint8_t)(IRQ_BASE + 0U), (uintptr_t)isr_irq0_timer);
-    idt_set_gate((uint8_t)(IRQ_BASE + 1U), (uintptr_t)isr_irq1);
+    idt_set_gate((uint8_t)(IRQ_BASE + 1U), (uintptr_t)isr_irq1_keyboard);
     idt_set_gate((uint8_t)(IRQ_BASE + 2U), (uintptr_t)isr_irq2);
     idt_set_gate((uint8_t)(IRQ_BASE + 3U), (uintptr_t)isr_irq3);
     idt_set_gate((uint8_t)(IRQ_BASE + 4U), (uintptr_t)isr_irq4);

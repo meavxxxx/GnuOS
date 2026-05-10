@@ -10,7 +10,7 @@
 8. Kernel virtual allocator maps pages from PMM in a dedicated VA region.
 9. Large (2 MiB) bootstrap mappings can be split into 4K tables on demand.
 10. Scheduler bootstrap initializes ready queue and creates idle task.
-11. PIC is remapped, PIT timer is configured, and IRQ0 is unmasked.
+11. PIC is remapped, PIT timer is configured, and IRQ0/IRQ1 are unmasked.
 12. Hardware interrupts are enabled and timer ticks reach scheduler.
 13. Scheduler can dispatch kernel tasks using saved/restored task contexts.
 14. Demo RCU reader/updater/reclaimer tasks exercise grace periods and callback reclaim.

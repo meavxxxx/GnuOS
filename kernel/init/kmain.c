@@ -2,6 +2,7 @@
 #include <stdint.h>
 
 #include <gnuos/interrupts.h>
+#include <gnuos/keyboard.h>
 #include <gnuos/mm.h>
 #include <gnuos/multiboot2.h>
 #include <gnuos/panic.h>
@@ -305,7 +306,9 @@ void kmain(uint64_t boot_magic, uint64_t boot_info_addr)
     for (uint8_t irq = 0; irq < 16U; irq++) {
         pic_set_mask(irq);
     }
+    ps2_keyboard_init();
     pic_clear_mask(0U);
+    pic_clear_mask(1U);
     pit_init(100U);
     x86_64_interrupts_enable();
 
@@ -328,7 +331,7 @@ void kmain(uint64_t boot_magic, uint64_t boot_info_addr)
     } else {
         serial_write("GNU OS: current task tid: (null)\n");
     }
-    serial_write("GNU OS: IRQ0 timer unmasked and interrupts enabled.\n");
+    serial_write("GNU OS: IRQ0 timer and IRQ1 keyboard unmasked; interrupts enabled.\n");
 
     void *page = pmm_alloc_page();
     if (page) {
