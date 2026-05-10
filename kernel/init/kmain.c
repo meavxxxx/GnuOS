@@ -5,6 +5,7 @@
 #include <gnuos/multiboot2.h>
 #include <gnuos/panic.h>
 #include <gnuos/serial.h>
+#include <gnuos/vmm.h>
 
 #define VGA_WIDTH 80
 #define VGA_HEIGHT 25
@@ -12,6 +13,9 @@
 
 static uint8_t g_vga_row;
 static uint8_t g_vga_col;
+
+extern uint8_t __kernel_start;
+extern uint8_t __kernel_end;
 
 static uint16_t vga_entry(char c, uint8_t color)
 {
@@ -64,6 +68,12 @@ void kmain(uint64_t boot_magic, uint64_t boot_info_addr)
     const uint8_t color = 0x0A;
     uint64_t pmm_base = 0;
     uint64_t pmm_size = 0;
+    uint64_t kernel_start = 0;
+    uint64_t kernel_end = 0;
+    uint64_t kernel_size = 0;
+    uint64_t translated = 0;
+    uint64_t test_phys = 0;
+    uint64_t test_virt = 0x40000000ULL;
     int have_mmap = 0;
 
     vga_clear(0x07);
@@ -85,24 +95,57 @@ void kmain(uint64_t boot_magic, uint64_t boot_info_addr)
     }
 
     pmm_init(pmm_base, pmm_size);
+    kernel_start = (uint64_t)(uintptr_t)&__kernel_start;
+    kernel_end = (uint64_t)(uintptr_t)&__kernel_end;
+    kernel_size = kernel_end - kernel_start;
+    pmm_reserve_range(kernel_start, kernel_size);
+
+    if (!vmm_init()) {
+        kpanic("failed to initialize vmm");
+    }
 
     vga_write("GNU OS kernel bootstrap\n", color);
-    vga_write("Phase 1.3 in progress: PMM from multiboot map.\n", 0x0F);
+    vga_write("Phase 1.4 in progress: VMM bootstrap online.\n", 0x0F);
 
     serial_write("GNU OS: serial console initialized.\n");
     serial_write("GNU OS: kernel bootstrap reached kmain().\n");
     serial_write("GNU OS: multiboot info addr: ");
     serial_write_hex64(boot_info_addr);
     serial_write("\n");
+    serial_write("GNU OS: kernel image range: ");
+    serial_write_hex64(kernel_start);
+    serial_write("..");
+    serial_write_hex64(kernel_end);
+    serial_write("\n");
 
     void *page = pmm_alloc_page();
+    test_phys = (uint64_t)(uintptr_t)page;
     serial_write("GNU OS: PMM first allocated page: ");
     if (page) {
-        serial_write_hex64((uint64_t)(uintptr_t)page);
+        serial_write_hex64(test_phys);
     } else {
         serial_write("(null)");
     }
     serial_write("\n");
+
+    if (page && vmm_map_page(test_virt, test_phys, VMM_MAP_WRITABLE)) {
+        volatile uint64_t *probe = (volatile uint64_t *)(uintptr_t)test_virt;
+        *probe = 0x474E554F53564D4DULL;
+
+        if (vmm_translate(test_virt, &translated)) {
+            serial_write("GNU OS: VMM mapped/translated ");
+            serial_write_hex64(test_virt);
+            serial_write(" -> ");
+            serial_write_hex64(translated);
+            serial_write("\n");
+        } else {
+            serial_write("GNU OS: VMM translate failed for test mapping.\n");
+        }
+
+        (void)vmm_unmap_page(test_virt);
+    } else {
+        serial_write("GNU OS: VMM map test skipped/failed.\n");
+    }
 
 #if 0
     /* Optional bring-up test: should trigger #DE and halt in kpanic. */

@@ -111,6 +111,53 @@ void pmm_free_page(void *address)
     }
 }
 
+void pmm_reserve_range(uint64_t base, uint64_t size)
+{
+    if (size == 0 || g_total_pages == 0) {
+        return;
+    }
+
+    uint64_t end = base + size;
+    if (end < base) {
+        end = UINT64_MAX;
+    }
+
+    uint64_t aligned_start = base & ~(MM_PAGE_SIZE - 1ULL);
+    uint64_t aligned_end = 0;
+    if (end > UINT64_MAX - (MM_PAGE_SIZE - 1ULL)) {
+        aligned_end = UINT64_MAX & ~(MM_PAGE_SIZE - 1ULL);
+    } else {
+        aligned_end = (end + (MM_PAGE_SIZE - 1ULL)) & ~(MM_PAGE_SIZE - 1ULL);
+    }
+
+    if (aligned_end <= g_base) {
+        return;
+    }
+
+    if (aligned_start < g_base) {
+        aligned_start = g_base;
+    }
+
+    uint64_t pmm_end = g_base + g_total_pages * MM_PAGE_SIZE;
+    if (aligned_start >= pmm_end) {
+        return;
+    }
+
+    if (aligned_end > pmm_end) {
+        aligned_end = pmm_end;
+    }
+
+    uint64_t first_page = (aligned_start - g_base) / MM_PAGE_SIZE;
+    uint64_t last_page = (aligned_end - g_base) / MM_PAGE_SIZE;
+
+    for (uint64_t page = first_page; page < last_page; page++) {
+        if (!bitmap_test(page)) {
+            bitmap_set(page);
+            g_free_pages--;
+        }
+    }
+}
+
 uint64_t pmm_total_pages(void)
 {
     return g_total_pages;

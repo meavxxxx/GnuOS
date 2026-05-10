@@ -8,8 +8,8 @@
 void pmm_init(uint64_t base, uint64_t memory_size);
 void *pmm_alloc_page(void);
 void pmm_free_page(void *address);
+void pmm_reserve_range(uint64_t base, uint64_t size);
 uint64_t pmm_total_pages(void);
 uint64_t pmm_free_pages(void);
 
 #endif
-
