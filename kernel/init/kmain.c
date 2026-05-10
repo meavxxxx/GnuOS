@@ -1,6 +1,7 @@
 #include <stdint.h>
 
 #include <gnuos/interrupts.h>
+#include <gnuos/mm.h>
 #include <gnuos/serial.h>
 
 #define VGA_WIDTH 80
@@ -63,12 +64,22 @@ void kmain(void)
     vga_clear(0x07);
     serial_init();
     x86_64_idt_init();
+    pmm_init(0x100000ULL, 64ULL * 1024ULL * 1024ULL);
 
     vga_write("GNU OS kernel bootstrap\n", color);
-    vga_write("Phase 1.2 in progress: IDT + exception handlers.\n", 0x0F);
+    vga_write("Phase 1.3 in progress: PMM bootstrap online.\n", 0x0F);
 
     serial_write("GNU OS: serial console initialized.\n");
     serial_write("GNU OS: kernel bootstrap reached kmain().\n");
+
+    void *page = pmm_alloc_page();
+    serial_write("GNU OS: PMM first allocated page: ");
+    if (page) {
+        serial_write_hex64((uint64_t)(uintptr_t)page);
+    } else {
+        serial_write("(null)");
+    }
+    serial_write("\n");
 
 #if 0
     /* Optional bring-up test: should trigger #DE and halt in kpanic. */

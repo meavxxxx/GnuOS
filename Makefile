@@ -29,7 +29,8 @@ COMMON_LDFLAGS := -nostdlib -no-pie -Wl,-n,-T,$(KERNEL_LINKER_SCRIPT)
 KERNEL_C_SOURCES := \
 	kernel/init/kmain.c \
 	kernel/init/panic.c \
-	kernel/arch/x86_64/interrupts/idt.c
+	kernel/arch/x86_64/interrupts/idt.c \
+	kernel/mm/pmm.c
 
 KERNEL_OBJECTS := \
 	$(patsubst %.c,$(BUILD_DIR)/%.o,$(KERNEL_C_SOURCES) $(ARCH_C_SOURCES)) \

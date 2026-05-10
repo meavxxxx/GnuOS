@@ -54,3 +54,13 @@ void serial_write(const char *message)
     }
 }
 
+void serial_write_hex64(uint64_t value)
+{
+    static const char digits[] = "0123456789ABCDEF";
+
+    serial_write("0x");
+    for (int nibble = 15; nibble >= 0; nibble--) {
+        uint8_t index = (uint8_t)((value >> (nibble * 4)) & 0xFU);
+        serial_write_char(digits[index]);
+    }
+}
