@@ -18,6 +18,7 @@ static uint64_t g_next_pid = 1;
 static uint64_t g_next_tid = 1;
 static task_t *g_current_task;
 static spinlock_t g_sched_lock;
+static uint64_t g_sched_ticks;
 
 static int sched_enqueue_task(uint16_t task_index)
 {
@@ -70,6 +71,8 @@ void sched_init(void)
         g_tasks[i].process = NULL;
         g_tasks[i].entry = NULL;
         g_tasks[i].arg = NULL;
+        g_tasks[i].runtime_ticks = 0;
+        g_tasks[i].context_switches = 0;
     }
 
     g_ready_head = 0;
@@ -78,6 +81,7 @@ void sched_init(void)
     g_next_pid = 1;
     g_next_tid = 1;
     g_current_task = NULL;
+    g_sched_ticks = 0;
 
     spinlock_unlock(&g_sched_lock);
     serial_write("GNU OS: scheduler initialized.\n");
@@ -115,6 +119,8 @@ task_t *sched_create_kernel_task(const char *name, kernel_task_entry_t entry, vo
     task->process = process;
     task->entry = entry;
     task->arg = arg;
+    task->runtime_ticks = 0;
+    task->context_switches = 0;
 
     if (!sched_enqueue_task(index)) {
         task->state = TASK_UNUSED;
@@ -152,6 +158,11 @@ task_t *sched_create_idle_task(void)
 void sched_tick(void)
 {
     spinlock_lock(&g_sched_lock);
+    g_sched_ticks++;
+
+    if (g_current_task && g_current_task->state == TASK_RUNNING) {
+        g_current_task->runtime_ticks++;
+    }
 
     uint16_t next_index = 0;
     if (!sched_dequeue_task(&next_index)) {
@@ -176,6 +187,7 @@ void sched_tick(void)
     }
 
     next->state = TASK_RUNNING;
+    next->context_switches++;
     g_current_task = next;
     spinlock_unlock(&g_sched_lock);
 }
@@ -189,4 +201,15 @@ uint64_t sched_ready_count(void)
     spinlock_unlock(&g_sched_lock);
 
     return ready;
+}
+
+uint64_t sched_total_ticks(void)
+{
+    uint64_t ticks = 0;
+
+    spinlock_lock(&g_sched_lock);
+    ticks = g_sched_ticks;
+    spinlock_unlock(&g_sched_lock);
+
+    return ticks;
 }

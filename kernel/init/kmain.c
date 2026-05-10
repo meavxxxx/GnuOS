@@ -205,6 +205,14 @@ void kmain(uint64_t boot_magic, uint64_t boot_info_addr)
     }
 
     kprintf("GNU OS: timer interrupt path active, ticks=%u\n", pit_ticks());
+    current_task = sched_current_task();
+    if (current_task) {
+        kprintf(
+            "GNU OS: sched ticks=%u, current runtime=%u, switches=%u\n",
+            sched_total_ticks(),
+            current_task->runtime_ticks,
+            current_task->context_switches);
+    }
 
 #if 0
     /* Optional bring-up test: should trigger #DE and halt in kpanic. */

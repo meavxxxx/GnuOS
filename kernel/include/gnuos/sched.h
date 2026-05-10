@@ -23,6 +23,8 @@ typedef struct task {
     process_t *process;
     kernel_task_entry_t entry;
     void *arg;
+    uint64_t runtime_ticks;
+    uint64_t context_switches;
 } task_t;
 
 void sched_init(void);
@@ -31,6 +33,6 @@ task_t *sched_create_kernel_task(const char *name, kernel_task_entry_t entry, vo
 task_t *sched_create_idle_task(void);
 void sched_tick(void);
 uint64_t sched_ready_count(void);
+uint64_t sched_total_ticks(void);
 
 #endif
-
