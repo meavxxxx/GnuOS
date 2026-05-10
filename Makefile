@@ -36,6 +36,7 @@ KERNEL_C_SOURCES := \
 	kernel/mm/vmm.c \
 	kernel/sched/sched.c \
 	kernel/lib/spinlock.c \
+	kernel/lib/printk.c \
 	kernel/arch/x86_64/boot/multiboot2.c
 
 KERNEL_OBJECTS := \

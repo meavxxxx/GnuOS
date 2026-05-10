@@ -7,6 +7,7 @@
 #include <gnuos/panic.h>
 #include <gnuos/pic.h>
 #include <gnuos/pit.h>
+#include <gnuos/printk.h>
 #include <gnuos/sched.h>
 #include <gnuos/serial.h>
 #include <gnuos/vmm.h>
@@ -129,35 +130,28 @@ void kmain(uint64_t boot_magic, uint64_t boot_info_addr)
 
     serial_write("GNU OS: serial console initialized.\n");
     serial_write("GNU OS: kernel bootstrap reached kmain().\n");
-    serial_write("GNU OS: multiboot info addr: ");
-    serial_write_hex64(boot_info_addr);
-    serial_write("\n");
-    serial_write("GNU OS: kernel image range: ");
-    serial_write_hex64(kernel_start);
-    serial_write("..");
-    serial_write_hex64(kernel_end);
-    serial_write("\n");
-    serial_write("GNU OS: ready tasks: ");
-    serial_write_hex64(sched_ready_count());
-    serial_write("\n");
+    kprintf(
+        "GNU OS: multiboot info addr: 0x%X\n"
+        "GNU OS: kernel image range: 0x%X..0x%X\n"
+        "GNU OS: ready tasks: %u\n",
+        boot_info_addr,
+        kernel_start,
+        kernel_end,
+        sched_ready_count());
     current_task = sched_current_task();
-    serial_write("GNU OS: current task tid: ");
     if (current_task) {
-        serial_write_hex64(current_task->tid);
+        kprintf("GNU OS: current task tid: %u\n", current_task->tid);
     } else {
-        serial_write("(null)");
+        serial_write("GNU OS: current task tid: (null)\n");
     }
-    serial_write("\n");
     serial_write("GNU OS: IRQ0 timer unmasked and interrupts enabled.\n");
 
     void *page = pmm_alloc_page();
-    serial_write("GNU OS: PMM first allocated page: ");
     if (page) {
-        serial_write_hex64((uint64_t)(uintptr_t)page);
+        kprintf("GNU OS: PMM first allocated page: %p\n", page);
     } else {
-        serial_write("(null)");
+        serial_write("GNU OS: PMM first allocated page: (null)\n");
     }
-    serial_write("\n");
 
     void *heap_page = vmm_alloc_kernel_pages(1, VMM_MAP_WRITABLE);
     test_virt = (uint64_t)(uintptr_t)heap_page;
@@ -167,11 +161,10 @@ void kmain(uint64_t boot_magic, uint64_t boot_info_addr)
         *probe = 0x474E554F53564D4DULL;
 
         if (vmm_translate(test_virt, &translated)) {
-            serial_write("GNU OS: VMM allocated/mapped ");
-            serial_write_hex64(test_virt);
-            serial_write(" -> ");
-            serial_write_hex64(translated);
-            serial_write("\n");
+            kprintf(
+                "GNU OS: VMM allocated/mapped 0x%X -> 0x%X\n",
+                test_virt,
+                translated);
         } else {
             serial_write("GNU OS: VMM translate failed for test mapping.\n");
         }
@@ -190,11 +183,10 @@ void kmain(uint64_t boot_magic, uint64_t boot_info_addr)
             *probe = 0x53504C4954564D4DULL;
 
             if (vmm_translate(split_test_virt, &translated)) {
-                serial_write("GNU OS: VMM split/remap ");
-                serial_write_hex64(split_test_virt);
-                serial_write(" -> ");
-                serial_write_hex64(translated);
-                serial_write("\n");
+                kprintf(
+                    "GNU OS: VMM split/remap 0x%X -> 0x%X\n",
+                    split_test_virt,
+                    translated);
             }
         } else {
             serial_write("GNU OS: VMM split/remap test failed.\n");
@@ -212,9 +204,7 @@ void kmain(uint64_t boot_magic, uint64_t boot_info_addr)
         __asm__ volatile("hlt");
     }
 
-    serial_write("GNU OS: timer interrupt path active, ticks=");
-    serial_write_hex64(pit_ticks());
-    serial_write("\n");
+    kprintf("GNU OS: timer interrupt path active, ticks=%u\n", pit_ticks());
 
 #if 0
     /* Optional bring-up test: should trigger #DE and halt in kpanic. */
