@@ -30,7 +30,8 @@ KERNEL_C_SOURCES := \
 	kernel/init/kmain.c \
 	kernel/init/panic.c \
 	kernel/arch/x86_64/interrupts/idt.c \
-	kernel/mm/pmm.c
+	kernel/mm/pmm.c \
+	kernel/arch/x86_64/boot/multiboot2.c
 
 KERNEL_OBJECTS := \
 	$(patsubst %.c,$(BUILD_DIR)/%.o,$(KERNEL_C_SOURCES) $(ARCH_C_SOURCES)) \

@@ -2,6 +2,8 @@
 
 #include <gnuos/interrupts.h>
 #include <gnuos/mm.h>
+#include <gnuos/multiboot2.h>
+#include <gnuos/panic.h>
 #include <gnuos/serial.h>
 
 #define VGA_WIDTH 80
@@ -57,20 +59,41 @@ static void vga_write(const char *message, uint8_t color)
     }
 }
 
-void kmain(void)
+void kmain(uint64_t boot_magic, uint64_t boot_info_addr)
 {
     const uint8_t color = 0x0A;
+    uint64_t pmm_base = 0;
+    uint64_t pmm_size = 0;
+    int have_mmap = 0;
 
     vga_clear(0x07);
     serial_init();
     x86_64_idt_init();
-    pmm_init(0x100000ULL, 64ULL * 1024ULL * 1024ULL);
+
+    if ((uint32_t)boot_magic != MULTIBOOT2_BOOTLOADER_MAGIC) {
+        kpanic("invalid multiboot2 magic");
+    }
+
+    have_mmap = multiboot2_find_largest_available_region(
+        boot_info_addr,
+        &pmm_base,
+        &pmm_size);
+    if (!have_mmap) {
+        serial_write("GNU OS: no valid multiboot memory map found, using fallback.\n");
+        pmm_base = 0x100000ULL;
+        pmm_size = 64ULL * 1024ULL * 1024ULL;
+    }
+
+    pmm_init(pmm_base, pmm_size);
 
     vga_write("GNU OS kernel bootstrap\n", color);
-    vga_write("Phase 1.3 in progress: PMM bootstrap online.\n", 0x0F);
+    vga_write("Phase 1.3 in progress: PMM from multiboot map.\n", 0x0F);
 
     serial_write("GNU OS: serial console initialized.\n");
     serial_write("GNU OS: kernel bootstrap reached kmain().\n");
+    serial_write("GNU OS: multiboot info addr: ");
+    serial_write_hex64(boot_info_addr);
+    serial_write("\n");
 
     void *page = pmm_alloc_page();
     serial_write("GNU OS: PMM first allocated page: ");

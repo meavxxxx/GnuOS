@@ -11,6 +11,8 @@ _start:
     cli
     movq $stack_top, %rsp
     movq %rsp, %rbp
+    movl %eax, %edi
+    movl %ebx, %esi
     call kmain
 
 halt:

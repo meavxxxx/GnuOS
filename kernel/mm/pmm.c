@@ -36,8 +36,14 @@ static void bitmap_fill_allocated(void)
 
 void pmm_init(uint64_t base, uint64_t memory_size)
 {
+    uint64_t end = base + memory_size;
+
     g_base = (base + (MM_PAGE_SIZE - 1ULL)) & ~(MM_PAGE_SIZE - 1ULL);
-    g_total_pages = memory_size / MM_PAGE_SIZE;
+    if (end < base || g_base >= end) {
+        g_total_pages = 0;
+    } else {
+        g_total_pages = (end - g_base) / MM_PAGE_SIZE;
+    }
     if (g_total_pages > PMM_MAX_PAGES) {
         g_total_pages = PMM_MAX_PAGES;
     }
@@ -114,4 +120,3 @@ uint64_t pmm_free_pages(void)
 {
     return g_free_pages;
 }
-
