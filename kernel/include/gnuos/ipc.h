@@ -24,6 +24,13 @@ int ipc_channel_recv(
     uint16_t payload_capacity,
     uint16_t *out_size,
     uint64_t *out_sender_tid);
+int ipc_channel_rendezvous_send(int channel_id, const void *payload, uint16_t size, uint64_t sender_tid);
+int ipc_channel_rendezvous_recv(
+    int channel_id,
+    void *payload,
+    uint16_t payload_capacity,
+    uint16_t *out_size,
+    uint64_t *out_sender_tid);
 uint16_t ipc_channel_count(void);
 
 #endif

@@ -13,6 +13,9 @@ typedef struct {
     uint16_t tail;
     uint16_t count;
     ipc_message_t queue[IPC_CHANNEL_QUEUE_CAPACITY];
+    uint8_t rendezvous_pending;
+    uint64_t rendezvous_generation;
+    ipc_message_t rendezvous_message;
 } ipc_channel_t;
 
 static spinlock_t g_ipc_lock;
@@ -122,6 +125,18 @@ static int ipc_is_valid_channel_id(int channel_id)
     return 1;
 }
 
+static void ipc_wait_hint(void)
+{
+    task_t *current;
+
+    current = sched_current_task();
+    if (current && current->tid != 0U) {
+        sched_yield();
+    } else {
+        __asm__ volatile("pause");
+    }
+}
+
 void ipc_init(void)
 {
     uint64_t irq_flags;
@@ -135,6 +150,10 @@ void ipc_init(void)
         g_ipc_channels[index].head = 0U;
         g_ipc_channels[index].tail = 0U;
         g_ipc_channels[index].count = 0U;
+        g_ipc_channels[index].rendezvous_pending = 0U;
+        g_ipc_channels[index].rendezvous_generation = 0U;
+        g_ipc_channels[index].rendezvous_message.sender_tid = 0U;
+        g_ipc_channels[index].rendezvous_message.size = 0U;
         ipc_name_copy(g_ipc_channels[index].name, "");
     }
     g_ipc_channel_count = 0U;
@@ -184,6 +203,10 @@ int ipc_channel_create(const char *name)
     g_ipc_channels[(uint16_t)free_slot].head = 0U;
     g_ipc_channels[(uint16_t)free_slot].tail = 0U;
     g_ipc_channels[(uint16_t)free_slot].count = 0U;
+    g_ipc_channels[(uint16_t)free_slot].rendezvous_pending = 0U;
+    g_ipc_channels[(uint16_t)free_slot].rendezvous_generation = 0U;
+    g_ipc_channels[(uint16_t)free_slot].rendezvous_message.sender_tid = 0U;
+    g_ipc_channels[(uint16_t)free_slot].rendezvous_message.size = 0U;
     ipc_name_copy(g_ipc_channels[(uint16_t)free_slot].name, name);
     g_ipc_channel_count++;
 
@@ -311,6 +334,131 @@ int ipc_channel_recv(
     spinlock_unlock(&g_ipc_lock);
     ipc_irq_restore(irq_flags);
     return 0;
+}
+
+int ipc_channel_rendezvous_send(int channel_id, const void *payload, uint16_t size, uint64_t sender_tid)
+{
+    ipc_channel_t *channel;
+    task_t *current_task;
+    uint64_t base_generation = 0U;
+    uint64_t irq_flags;
+
+    if (!payload || size == 0U || size > IPC_MESSAGE_DATA_MAX) {
+        return -1;
+    }
+
+    if (sender_tid == 0U) {
+        current_task = sched_current_task();
+        if (current_task) {
+            sender_tid = current_task->tid;
+        }
+    }
+
+    for (;;) {
+        irq_flags = ipc_irq_save();
+        spinlock_lock(&g_ipc_lock);
+
+        if (!ipc_is_valid_channel_id(channel_id)) {
+            spinlock_unlock(&g_ipc_lock);
+            ipc_irq_restore(irq_flags);
+            return -2;
+        }
+
+        channel = &g_ipc_channels[(uint16_t)channel_id];
+        if (!channel->rendezvous_pending) {
+            channel->rendezvous_message.sender_tid = sender_tid;
+            channel->rendezvous_message.size = size;
+            for (uint16_t index = 0U; index < size; index++) {
+                channel->rendezvous_message.data[index] = ((const uint8_t *)payload)[index];
+            }
+
+            channel->rendezvous_pending = 1U;
+            base_generation = channel->rendezvous_generation;
+            spinlock_unlock(&g_ipc_lock);
+            ipc_irq_restore(irq_flags);
+            break;
+        }
+
+        spinlock_unlock(&g_ipc_lock);
+        ipc_irq_restore(irq_flags);
+        ipc_wait_hint();
+    }
+
+    for (;;) {
+        irq_flags = ipc_irq_save();
+        spinlock_lock(&g_ipc_lock);
+
+        if (!ipc_is_valid_channel_id(channel_id)) {
+            spinlock_unlock(&g_ipc_lock);
+            ipc_irq_restore(irq_flags);
+            return -2;
+        }
+
+        channel = &g_ipc_channels[(uint16_t)channel_id];
+        if (!channel->rendezvous_pending && channel->rendezvous_generation != base_generation) {
+            spinlock_unlock(&g_ipc_lock);
+            ipc_irq_restore(irq_flags);
+            return 0;
+        }
+
+        spinlock_unlock(&g_ipc_lock);
+        ipc_irq_restore(irq_flags);
+        ipc_wait_hint();
+    }
+}
+
+int ipc_channel_rendezvous_recv(
+    int channel_id,
+    void *payload,
+    uint16_t payload_capacity,
+    uint16_t *out_size,
+    uint64_t *out_sender_tid)
+{
+    ipc_channel_t *channel;
+    ipc_message_t *message;
+    uint64_t irq_flags;
+
+    if (!payload || !out_size || !out_sender_tid) {
+        return -1;
+    }
+
+    for (;;) {
+        irq_flags = ipc_irq_save();
+        spinlock_lock(&g_ipc_lock);
+
+        if (!ipc_is_valid_channel_id(channel_id)) {
+            spinlock_unlock(&g_ipc_lock);
+            ipc_irq_restore(irq_flags);
+            return -2;
+        }
+
+        channel = &g_ipc_channels[(uint16_t)channel_id];
+        if (channel->rendezvous_pending) {
+            message = &channel->rendezvous_message;
+            if (payload_capacity < message->size) {
+                spinlock_unlock(&g_ipc_lock);
+                ipc_irq_restore(irq_flags);
+                return -4;
+            }
+
+            for (uint16_t index = 0U; index < message->size; index++) {
+                ((uint8_t *)payload)[index] = message->data[index];
+            }
+
+            *out_size = message->size;
+            *out_sender_tid = message->sender_tid;
+            channel->rendezvous_pending = 0U;
+            channel->rendezvous_generation++;
+
+            spinlock_unlock(&g_ipc_lock);
+            ipc_irq_restore(irq_flags);
+            return 0;
+        }
+
+        spinlock_unlock(&g_ipc_lock);
+        ipc_irq_restore(irq_flags);
+        ipc_wait_hint();
+    }
 }
 
 uint16_t ipc_channel_count(void)

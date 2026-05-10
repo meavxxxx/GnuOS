@@ -47,6 +47,20 @@ typedef struct {
     uint8_t in_use;
 } demo_rcu_node_t;
 
+typedef struct {
+    const char *name;
+    int channel_id;
+    uint32_t period_ticks;
+    uint64_t sent;
+    uint64_t failed;
+} demo_ipc_rendezvous_sender_arg_t;
+
+typedef struct {
+    const char *name;
+    int channel_id;
+    uint64_t received;
+} demo_ipc_rendezvous_receiver_arg_t;
+
 #define DEMO_RCU_POOL_SIZE 32U
 
 static spinlock_t g_demo_rcu_pool_lock;
@@ -64,6 +78,20 @@ static demo_rcu_updater_arg_t g_demo_rcu_updater = {
     .period_ticks = 60U,
     .published = 0U,
     .dropped = 0U,
+};
+
+static demo_ipc_rendezvous_sender_arg_t g_demo_ipc_sender = {
+    .name = "ipc-rv-sender",
+    .channel_id = -1,
+    .period_ticks = 50U,
+    .sent = 0U,
+    .failed = 0U,
+};
+
+static demo_ipc_rendezvous_receiver_arg_t g_demo_ipc_receiver = {
+    .name = "ipc-rv-receiver",
+    .channel_id = -1,
+    .received = 0U,
 };
 
 static void demo_rcu_pool_init(void)
@@ -191,6 +219,69 @@ static void demo_rcu_reclaimer_entry(void *arg)
     }
 }
 
+static void demo_ipc_rendezvous_sender_entry(void *arg)
+{
+    demo_ipc_rendezvous_sender_arg_t *sender = (demo_ipc_rendezvous_sender_arg_t *)arg;
+    uint64_t last_tick = pit_ticks();
+    static const char payload[] = "rv-sync";
+
+    for (;;) {
+        while ((pit_ticks() - last_tick) < sender->period_ticks) {
+            __asm__ volatile("hlt");
+        }
+        last_tick = pit_ticks();
+
+        if (ipc_channel_rendezvous_send(
+                sender->channel_id,
+                payload,
+                (uint16_t)(sizeof(payload) - 1U),
+                0U) == 0) {
+            sender->sent++;
+            if ((sender->sent % 8U) == 0U) {
+                kprintf(
+                    "GNU OS: %s sent=%u failed=%u\n",
+                    sender->name,
+                    sender->sent,
+                    sender->failed);
+            }
+        } else {
+            sender->failed++;
+        }
+
+        sched_yield();
+    }
+}
+
+static void demo_ipc_rendezvous_receiver_entry(void *arg)
+{
+    demo_ipc_rendezvous_receiver_arg_t *receiver = (demo_ipc_rendezvous_receiver_arg_t *)arg;
+    char payload[IPC_MESSAGE_DATA_MAX + 1U];
+    uint16_t size = 0U;
+    uint64_t sender_tid = 0U;
+
+    for (;;) {
+        if (ipc_channel_rendezvous_recv(
+                receiver->channel_id,
+                payload,
+                IPC_MESSAGE_DATA_MAX,
+                &size,
+                &sender_tid) == 0) {
+            receiver->received++;
+            if ((receiver->received % 8U) == 0U) {
+                payload[size] = '\0';
+                kprintf(
+                    "GNU OS: %s received=%u sender_tid=%u msg='%s'\n",
+                    receiver->name,
+                    receiver->received,
+                    sender_tid,
+                    payload);
+            }
+        } else {
+            sched_yield();
+        }
+    }
+}
+
 static uint16_t vga_entry(char c, uint8_t color)
 {
     return (uint16_t)c | ((uint16_t)color << 8U);
@@ -250,6 +341,7 @@ void kmain(uint64_t boot_magic, uint64_t boot_info_addr)
     uint64_t split_test_virt = 0x0000000000200000ULL;
     uint64_t ticks_before = 0;
     int ipc_boot_channel = -1;
+    int ipc_rendezvous_channel = -1;
     char ipc_recv_buffer[IPC_MESSAGE_DATA_MAX + 1U];
     uint16_t ipc_recv_size = 0U;
     uint64_t ipc_sender_tid = 0U;
@@ -257,6 +349,8 @@ void kmain(uint64_t boot_magic, uint64_t boot_info_addr)
     task_t *rcu_reader_task = NULL;
     task_t *rcu_updater_task = NULL;
     task_t *rcu_reclaimer_task = NULL;
+    task_t *ipc_rendezvous_sender_task = NULL;
+    task_t *ipc_rendezvous_receiver_task = NULL;
     int have_mmap = 0;
 
     vga_clear(0x07);
@@ -365,6 +459,26 @@ void kmain(uint64_t boot_magic, uint64_t boot_info_addr)
                     ipc_sender_tid,
                     ipc_channel_count());
             }
+        }
+    }
+
+    ipc_rendezvous_channel = ipc_channel_create("sync-rv");
+    if (ipc_rendezvous_channel >= 0) {
+        g_demo_ipc_sender.channel_id = ipc_rendezvous_channel;
+        g_demo_ipc_receiver.channel_id = ipc_rendezvous_channel;
+        ipc_rendezvous_sender_task = sched_create_kernel_task(
+            "ipc-rv-sender",
+            demo_ipc_rendezvous_sender_entry,
+            &g_demo_ipc_sender);
+        ipc_rendezvous_receiver_task = sched_create_kernel_task(
+            "ipc-rv-receiver",
+            demo_ipc_rendezvous_receiver_entry,
+            &g_demo_ipc_receiver);
+
+        if (ipc_rendezvous_sender_task && ipc_rendezvous_receiver_task) {
+            kprintf(
+                "GNU OS: IPC rendezvous demo online channel=%u\n",
+                (uint64_t)(uint16_t)ipc_rendezvous_channel);
         }
     }
 
