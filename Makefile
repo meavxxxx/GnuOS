@@ -32,6 +32,7 @@ KERNEL_C_SOURCES := \
 	kernel/arch/x86_64/interrupts/idt.c \
 	kernel/mm/pmm.c \
 	kernel/mm/vmm.c \
+	kernel/sched/sched.c \
 	kernel/arch/x86_64/boot/multiboot2.c
 
 KERNEL_OBJECTS := \

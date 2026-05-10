@@ -1,9 +1,11 @@
+#include <stddef.h>
 #include <stdint.h>
 
 #include <gnuos/interrupts.h>
 #include <gnuos/mm.h>
 #include <gnuos/multiboot2.h>
 #include <gnuos/panic.h>
+#include <gnuos/sched.h>
 #include <gnuos/serial.h>
 #include <gnuos/vmm.h>
 
@@ -74,6 +76,7 @@ void kmain(uint64_t boot_magic, uint64_t boot_info_addr)
     uint64_t translated = 0;
     uint64_t test_virt = 0;
     uint64_t split_test_virt = 0x0000000000200000ULL;
+    task_t *current_task = NULL;
     int have_mmap = 0;
 
     vga_clear(0x07);
@@ -104,8 +107,14 @@ void kmain(uint64_t boot_magic, uint64_t boot_info_addr)
         kpanic("failed to initialize vmm");
     }
 
+    sched_init();
+    if (!sched_create_idle_task()) {
+        kpanic("failed to create idle task");
+    }
+    sched_tick();
+
     vga_write("GNU OS kernel bootstrap\n", color);
-    vga_write("Phase 1.4 in progress: VMM bootstrap online.\n", 0x0F);
+    vga_write("Phase 1.5 in progress: scheduler bootstrap online.\n", 0x0F);
 
     serial_write("GNU OS: serial console initialized.\n");
     serial_write("GNU OS: kernel bootstrap reached kmain().\n");
@@ -116,6 +125,17 @@ void kmain(uint64_t boot_magic, uint64_t boot_info_addr)
     serial_write_hex64(kernel_start);
     serial_write("..");
     serial_write_hex64(kernel_end);
+    serial_write("\n");
+    serial_write("GNU OS: ready tasks: ");
+    serial_write_hex64(sched_ready_count());
+    serial_write("\n");
+    current_task = sched_current_task();
+    serial_write("GNU OS: current task tid: ");
+    if (current_task) {
+        serial_write_hex64(current_task->tid);
+    } else {
+        serial_write("(null)");
+    }
     serial_write("\n");
 
     void *page = pmm_alloc_page();
