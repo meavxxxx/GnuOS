@@ -2,13 +2,16 @@
 
 #ifdef GNUOS_DYNAMIC_SMOKE
 #include <execinfo.h>
+#include <fcntl.h>
 #include <gnuos/tls.h>
 #include <link.h>
 #include <pthread.h>
 #include <semaphore.h>
 #include <signal.h>
 #include <arpa/inet.h>
+#include <sys/stat.h>
 #include <sys/socket.h>
+#include <unistd.h>
 
 extern void gnuos_libc_stub_touch(void);
 
@@ -59,6 +62,8 @@ int main(int argc, char **argv, char **envp)
     in_port_t loop_port_be = 0;
     char inet_text[16] = "127.0.0.1";
     char inet_out[64];
+    int file_fd = -1;
+    struct stat file_stat;
 
     gnuos_libc_stub_touch();
     tls_base = __gnuos_get_tls_base();
@@ -118,7 +123,20 @@ int main(int argc, char **argv, char **envp)
         (void)send(sockfd, socket_buf, sizeof(socket_buf), 0);
         (void)recv(sockfd, socket_buf, sizeof(socket_buf), 0);
         (void)shutdown(sockfd, SHUT_RDWR);
+        (void)close(sockfd);
     }
+    file_fd = open("./dummy", O_CREAT | O_RDWR | O_TRUNC, 0644);
+    if (file_fd >= 0) {
+        (void)write(file_fd, socket_buf, sizeof(socket_buf));
+        (void)lseek(file_fd, 0, SEEK_SET);
+        (void)read(file_fd, socket_buf, sizeof(socket_buf));
+        (void)fstat(file_fd, &file_stat);
+        (void)chmod("./dummy", 0644);
+        (void)access("./dummy", F_OK);
+        (void)close(file_fd);
+    }
+    (void)stat("./dummy", &file_stat);
+    (void)mkdir("./tmp", 0755);
 #endif
     return 0;
 }

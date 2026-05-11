@@ -39,6 +39,9 @@ Current status:
   `socket`, `bind`, `listen`, `accept`, `connect`, `send`, `recv`,
   `sendto`, `recvfrom`, `shutdown`, `htons`, `ntohs`, `htonl`, `ntohl`,
   `inet_pton`, `inet_ntop`.
+- `libc.so.6` and stage-0 resolver expose file I/O scaffolding APIs:
+  `open`, `close`, `read`, `write`, `lseek`, `fstat`, `stat`, `access`,
+  `chmod`, `mkdir`.
 - The sysroot installer places:
   - loader at `/lib/ld-gnuos.so.1`
   - stub libc at `/usr/lib/libc.so.6` (and `/usr/lib/libc.so` for link-time lookup)

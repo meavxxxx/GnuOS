@@ -248,6 +248,7 @@
 - [x] Минимальный POSIX semaphore ABI scaffolding (`<semaphore.h>`, `sem_*` stubs)
 - [x] Минимальный signal ABI scaffolding (`<signal.h>`, `sig*`/`kill`/`raise` stubs)
 - [x] Минимальный socket ABI scaffolding (`<sys/socket.h>`, `<netinet/in.h>`, `<arpa/inet.h>`)
+- [x] Минимальный file I/O ABI scaffolding (`<fcntl.h>`, `<sys/stat.h>`, `read`/`write`/...)
 - [x] Поддержка TLS (Thread-Local Storage, `%fs` base)
 - [x] Реализация `dl_iterate_phdr`, `backtrace()`
 
@@ -273,6 +274,7 @@
 - [ ] `<pthread.h>` и расширения (`pthread_attr_*`, `sem_*`, ...)
 - [ ] `<sys/socket.h>`, `<netinet/in.h>`, `<arpa/inet.h>`
 - [x] Минимальный сетевой ABI scaffolding (`socket`/`bind`/`connect` + `hton*`/`inet_*`)
+- [x] Минимальный файловый ABI scaffolding (`<fcntl.h>`, `<sys/stat.h>`, `<unistd.h>`)
 - [ ] Тест-сьют POSIX Conformance (POSIX Test Suite / LTP)
 
 ---

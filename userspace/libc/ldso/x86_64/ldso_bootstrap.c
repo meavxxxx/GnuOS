@@ -2,13 +2,16 @@
 
 #include <arpa/inet.h>
 #include <execinfo.h>
+#include <fcntl.h>
 #include <gnuos/tls.h>
 #include <link.h>
 #include <netinet/in.h>
 #include <pthread.h>
 #include <semaphore.h>
 #include <signal.h>
+#include <sys/stat.h>
 #include <sys/socket.h>
+#include <unistd.h>
 
 #include "ldso_dlfcn.h"
 #include "ldso_elf.h"
@@ -25,7 +28,7 @@
 #define LDSO_LD_PRELOAD_KEY "LD_PRELOAD="
 #define LDSO_LD_PRELOAD_KEY_LEN 11U
 #define LDSO_PRELOAD_TOKEN_MAX 128U
-#define LDSO_STAGE0_BUILTIN_SYMBOL_COUNT 53U
+#define LDSO_STAGE0_BUILTIN_SYMBOL_COUNT 63U
 
 #define GNUOS_PTHREAD_ENOSYS 38
 #define GNUOS_PTHREAD_EINVAL 22
@@ -43,6 +46,11 @@
 #define GNUOS_SOCKET_EOPNOTSUPP 95
 #define GNUOS_SOCKET_FD_BASE 3
 #define GNUOS_SOCKET_MAX 32
+#define GNUOS_FILE_ENOENT 2
+#define GNUOS_FILE_EBADF 9
+#define GNUOS_FILE_ENFILE 23
+#define GNUOS_FILE_FD_BASE 64
+#define GNUOS_FILE_MAX 64
 
 typedef struct {
     uint64_t a_type;
@@ -91,6 +99,15 @@ typedef struct {
     int shutdown_how;
 } gnuos_socket_entry_t;
 static gnuos_socket_entry_t g_socket_table[GNUOS_SOCKET_MAX];
+typedef struct {
+    int in_use;
+    int flags;
+    mode_t mode;
+    off_t offset;
+    struct stat st;
+} gnuos_file_entry_t;
+static gnuos_file_entry_t g_file_table[GNUOS_FILE_MAX];
+static mode_t g_file_umask = 0;
 
 static const uint64_t *ldso_stack_skip_argv(const uint64_t *cursor, uint64_t argc)
 {
@@ -657,6 +674,250 @@ int shutdown(int sockfd, int how)
     return 0;
 }
 
+static gnuos_file_entry_t *gnuos_file_get(int fd)
+{
+    int index = fd - GNUOS_FILE_FD_BASE;
+
+    if (index < 0 || index >= GNUOS_FILE_MAX) {
+        return 0;
+    }
+    if (!g_file_table[index].in_use) {
+        return 0;
+    }
+
+    return &g_file_table[index];
+}
+
+static int gnuos_file_alloc_fd(void)
+{
+    int index;
+
+    for (index = 0; index < GNUOS_FILE_MAX; index++) {
+        if (!g_file_table[index].in_use) {
+            g_file_table[index].in_use = 1;
+            g_file_table[index].flags = O_RDONLY;
+            g_file_table[index].mode = S_IFREG | S_IRUSR | S_IWUSR | S_IRGRP | S_IROTH;
+            g_file_table[index].offset = 0;
+            g_file_table[index].st.st_mode = g_file_table[index].mode;
+            g_file_table[index].st.st_size = 0;
+            g_file_table[index].st.st_nlink = 1;
+            g_file_table[index].st.st_blksize = 4096;
+            g_file_table[index].st.st_blocks = 0;
+            return GNUOS_FILE_FD_BASE + index;
+        }
+    }
+
+    return -1;
+}
+
+int open(const char *pathname, int flags, ...)
+{
+    int fd;
+    gnuos_file_entry_t *entry;
+
+    if (!pathname || pathname[0] == '\0') {
+        return -GNUOS_PTHREAD_EINVAL;
+    }
+    if (pathname[0] != '/' && pathname[0] != '.') {
+        return -GNUOS_FILE_ENOENT;
+    }
+
+    fd = gnuos_file_alloc_fd();
+    if (fd < 0) {
+        return -GNUOS_FILE_ENFILE;
+    }
+
+    entry = gnuos_file_get(fd);
+    entry->flags = flags;
+    if (flags & O_TRUNC) {
+        entry->st.st_size = 0;
+    }
+
+    return fd;
+}
+
+int close(int fd)
+{
+    gnuos_socket_entry_t *sock_entry = gnuos_socket_get(fd);
+    gnuos_file_entry_t *file_entry = gnuos_file_get(fd);
+
+    if (sock_entry) {
+        sock_entry->in_use = 0;
+        sock_entry->connected = 0;
+        sock_entry->listening = 0;
+        return 0;
+    }
+
+    if (file_entry) {
+        file_entry->in_use = 0;
+        file_entry->offset = 0;
+        return 0;
+    }
+
+    return -GNUOS_FILE_EBADF;
+}
+
+ssize_t read(int fd, void *buf, size_t count)
+{
+    gnuos_socket_entry_t *sock_entry = gnuos_socket_get(fd);
+    gnuos_file_entry_t *file_entry = gnuos_file_get(fd);
+    size_t i;
+    unsigned char *out = (unsigned char *)buf;
+
+    if (sock_entry) {
+        return recv(fd, buf, count, 0);
+    }
+    if (!file_entry) {
+        return -GNUOS_FILE_EBADF;
+    }
+    if (!buf && count != 0U) {
+        return -GNUOS_PTHREAD_EINVAL;
+    }
+
+    for (i = 0; i < count; i++) {
+        out[i] = 0;
+    }
+    file_entry->offset += (off_t)count;
+    return (ssize_t)count;
+}
+
+ssize_t write(int fd, const void *buf, size_t count)
+{
+    gnuos_socket_entry_t *sock_entry = gnuos_socket_get(fd);
+    gnuos_file_entry_t *file_entry = gnuos_file_get(fd);
+
+    (void)buf;
+    if (sock_entry) {
+        return send(fd, buf, count, 0);
+    }
+    if (!file_entry) {
+        return -GNUOS_FILE_EBADF;
+    }
+
+    file_entry->offset += (off_t)count;
+    if (file_entry->offset > file_entry->st.st_size) {
+        file_entry->st.st_size = file_entry->offset;
+    }
+    return (ssize_t)count;
+}
+
+off_t lseek(int fd, off_t offset, int whence)
+{
+    gnuos_file_entry_t *entry = gnuos_file_get(fd);
+    off_t base;
+    off_t new_offset;
+
+    if (!entry) {
+        return -GNUOS_FILE_EBADF;
+    }
+
+    switch (whence) {
+    case SEEK_SET:
+        base = 0;
+        break;
+    case SEEK_CUR:
+        base = entry->offset;
+        break;
+    case SEEK_END:
+        base = entry->st.st_size;
+        break;
+    default:
+        return -GNUOS_PTHREAD_EINVAL;
+    }
+
+    new_offset = base + offset;
+    if (new_offset < 0) {
+        return -GNUOS_PTHREAD_EINVAL;
+    }
+
+    entry->offset = new_offset;
+    return new_offset;
+}
+
+int fstat(int fd, struct stat *buf)
+{
+    gnuos_file_entry_t *entry = gnuos_file_get(fd);
+
+    if (!buf) {
+        return -GNUOS_PTHREAD_EINVAL;
+    }
+    if (!entry) {
+        return -GNUOS_FILE_EBADF;
+    }
+
+    *buf = entry->st;
+    return 0;
+}
+
+int stat(const char *path, struct stat *buf)
+{
+    if (!path || !buf) {
+        return -GNUOS_PTHREAD_EINVAL;
+    }
+    if (path[0] != '/' && path[0] != '.') {
+        return -GNUOS_FILE_ENOENT;
+    }
+
+    buf->st_mode = S_IFREG | S_IRUSR | S_IWUSR | S_IRGRP | S_IROTH;
+    buf->st_size = 0;
+    buf->st_nlink = 1;
+    buf->st_blksize = 4096;
+    buf->st_blocks = 0;
+    return 0;
+}
+
+int access(const char *pathname, int mode)
+{
+    (void)mode;
+    if (!pathname || pathname[0] == '\0') {
+        return -GNUOS_PTHREAD_EINVAL;
+    }
+    if (pathname[0] != '/' && pathname[0] != '.') {
+        return -GNUOS_FILE_ENOENT;
+    }
+
+    return 0;
+}
+
+int mkdir(const char *path, mode_t mode)
+{
+    (void)mode;
+    if (!path || path[0] == '\0') {
+        return -GNUOS_PTHREAD_EINVAL;
+    }
+
+    return GNUOS_PTHREAD_ENOSYS;
+}
+
+int chmod(const char *path, mode_t mode)
+{
+    (void)mode;
+    if (!path || path[0] == '\0') {
+        return -GNUOS_PTHREAD_EINVAL;
+    }
+
+    return 0;
+}
+
+int fchmod(int fd, mode_t mode)
+{
+    gnuos_file_entry_t *entry = gnuos_file_get(fd);
+    if (!entry) {
+        return -GNUOS_FILE_EBADF;
+    }
+
+    entry->mode = mode;
+    entry->st.st_mode = mode;
+    return 0;
+}
+
+mode_t umask(mode_t mask)
+{
+    mode_t old = g_file_umask;
+    g_file_umask = mask & 0777U;
+    return old;
+}
+
 static int gnuos_signal_valid(int signo)
 {
     return signo > 0 && signo < GNUOS_SIGNAL_NSIG;
@@ -990,6 +1251,26 @@ static int ldso_stage0_register_builtin_symbols(void)
     g_ldso_stage0_builtin_symbols[51].address = (uint64_t)(uintptr_t)inet_pton;
     g_ldso_stage0_builtin_symbols[52].name = "inet_ntop";
     g_ldso_stage0_builtin_symbols[52].address = (uint64_t)(uintptr_t)inet_ntop;
+    g_ldso_stage0_builtin_symbols[53].name = "open";
+    g_ldso_stage0_builtin_symbols[53].address = (uint64_t)(uintptr_t)open;
+    g_ldso_stage0_builtin_symbols[54].name = "close";
+    g_ldso_stage0_builtin_symbols[54].address = (uint64_t)(uintptr_t)close;
+    g_ldso_stage0_builtin_symbols[55].name = "read";
+    g_ldso_stage0_builtin_symbols[55].address = (uint64_t)(uintptr_t)read;
+    g_ldso_stage0_builtin_symbols[56].name = "write";
+    g_ldso_stage0_builtin_symbols[56].address = (uint64_t)(uintptr_t)write;
+    g_ldso_stage0_builtin_symbols[57].name = "lseek";
+    g_ldso_stage0_builtin_symbols[57].address = (uint64_t)(uintptr_t)lseek;
+    g_ldso_stage0_builtin_symbols[58].name = "fstat";
+    g_ldso_stage0_builtin_symbols[58].address = (uint64_t)(uintptr_t)fstat;
+    g_ldso_stage0_builtin_symbols[59].name = "stat";
+    g_ldso_stage0_builtin_symbols[59].address = (uint64_t)(uintptr_t)stat;
+    g_ldso_stage0_builtin_symbols[60].name = "access";
+    g_ldso_stage0_builtin_symbols[60].address = (uint64_t)(uintptr_t)access;
+    g_ldso_stage0_builtin_symbols[61].name = "chmod";
+    g_ldso_stage0_builtin_symbols[61].address = (uint64_t)(uintptr_t)chmod;
+    g_ldso_stage0_builtin_symbols[62].name = "mkdir";
+    g_ldso_stage0_builtin_symbols[62].address = (uint64_t)(uintptr_t)mkdir;
 
     registered_primary = ldso_dlfcn_register_builtin_object(
         "stage0-builtins",
