@@ -51,6 +51,7 @@ KERNEL_C_SOURCES := \
 	kernel/lib/rcu.c \
 	kernel/lib/printk.c \
 	kernel/security/capability.c \
+	kernel/security/seccomp.c \
 	kernel/syscall/syscall.c \
 	kernel/arch/x86_64/boot/multiboot2.c
 

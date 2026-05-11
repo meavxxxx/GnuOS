@@ -15,6 +15,7 @@
 #include <gnuos/printk.h>
 #include <gnuos/rcu.h>
 #include <gnuos/sched.h>
+#include <gnuos/seccomp.h>
 #include <gnuos/serial.h>
 #include <gnuos/shm.h>
 #include <gnuos/spinlock.h>
@@ -362,6 +363,11 @@ void kmain(uint64_t boot_magic, uint64_t boot_info_addr)
     int64_t syscall_userptr_bad_result = 0LL;
     int64_t syscall_userptr_good_result = -1LL;
     uint64_t syscall_user_tid_value = 0U;
+    int64_t syscall_seccomp_log_result = 0LL;
+    int64_t syscall_seccomp_deny_result = 0LL;
+    uint64_t syscall_seccomp_audit_total = 0U;
+    seccomp_audit_event_t syscall_seccomp_last_event;
+    int syscall_seccomp_have_last = 0;
     uint8_t syscall_fastpath_ready = 0U;
     uint64_t syscall_user_page_virt = 0x0000000080000000ULL;
     void *syscall_user_page = NULL;
@@ -511,6 +517,29 @@ void kmain(uint64_t boot_magic, uint64_t boot_info_addr)
         (void)vmm_unmap_page(syscall_user_page_virt);
         pmm_free_page(syscall_user_page);
     }
+    seccomp_set_default_action(SECCOMP_ACTION_ALLOW);
+    (void)seccomp_set_syscall_action(SYS_GETTID, SECCOMP_ACTION_LOG);
+    (void)seccomp_set_syscall_action(SYS_SCHED_YIELD, SECCOMP_ACTION_ERRNO);
+    syscall_seccomp_log_result = syscall_dispatch(SYS_GETTID, 0U, 0U, 0U, 0U, 0U, 0U);
+    syscall_seccomp_deny_result = syscall_dispatch(SYS_SCHED_YIELD, 0U, 0U, 0U, 0U, 0U, 0U);
+    syscall_seccomp_audit_total = seccomp_audit_count();
+    syscall_seccomp_have_last = (seccomp_audit_latest(&syscall_seccomp_last_event) == 0);
+    kprintf(
+        "GNU OS: seccomp demo log_result=%d deny_result=%d audit_total=%u\n",
+        syscall_seccomp_log_result,
+        syscall_seccomp_deny_result,
+        syscall_seccomp_audit_total);
+    if (syscall_seccomp_have_last) {
+        kprintf(
+            "GNU OS: seccomp latest seq=%u tid=%u nr=%u action=%u result=%d\n",
+            syscall_seccomp_last_event.sequence,
+            syscall_seccomp_last_event.tid,
+            syscall_seccomp_last_event.syscall_number,
+            (uint64_t)syscall_seccomp_last_event.action,
+            syscall_seccomp_last_event.result);
+    }
+    (void)seccomp_set_syscall_action(SYS_GETTID, SECCOMP_ACTION_ALLOW);
+    (void)seccomp_set_syscall_action(SYS_SCHED_YIELD, SECCOMP_ACTION_ALLOW);
 
     ipc_boot_channel = ipc_channel_create("boot-log");
     if (ipc_boot_channel >= 0) {

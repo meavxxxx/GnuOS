@@ -2,6 +2,7 @@
 #include <stdint.h>
 
 #include <gnuos/printk.h>
+#include <gnuos/seccomp.h>
 #include <gnuos/sched.h>
 #include <gnuos/spinlock.h>
 #include <gnuos/syscall.h>
@@ -9,6 +10,7 @@
 
 #define SYSCALL_ENOSYS (-38LL)
 #define SYSCALL_EFAULT (-14LL)
+#define SYSCALL_EPERM (-1LL)
 
 static spinlock_t g_syscall_lock;
 static syscall_handler_t g_syscall_table[SYSCALL_MAX_ENTRIES];
@@ -117,6 +119,7 @@ void syscall_init(void)
     spinlock_unlock(&g_syscall_lock);
     syscall_irq_restore(irq_flags);
 
+    seccomp_init();
     (void)syscall_register(SYS_GETTID, sys_gettid);
     (void)syscall_register(SYS_SCHED_YIELD, sys_sched_yield);
     (void)syscall_register(SYS_GETTID_USER, sys_gettid_user);
@@ -157,10 +160,26 @@ int64_t syscall_dispatch(
     uint64_t arg5)
 {
     syscall_handler_t handler = NULL;
+    task_t *current = NULL;
     uint64_t irq_flags;
+    uint64_t tid = 0U;
+    uint8_t action = SECCOMP_ACTION_ALLOW;
+    int64_t result = SYSCALL_ENOSYS;
 
     if (number >= SYSCALL_MAX_ENTRIES) {
         return SYSCALL_ENOSYS;
+    }
+
+    current = sched_current_task();
+    if (current) {
+        tid = current->tid;
+    }
+
+    action = seccomp_get_syscall_action(number);
+    if (action == SECCOMP_ACTION_ERRNO) {
+        result = SYSCALL_EPERM;
+        seccomp_audit_record(tid, number, action, result);
+        return result;
     }
 
     irq_flags = syscall_irq_save();
@@ -170,10 +189,16 @@ int64_t syscall_dispatch(
     syscall_irq_restore(irq_flags);
 
     if (!handler) {
-        return SYSCALL_ENOSYS;
+        result = SYSCALL_ENOSYS;
+    } else {
+        result = handler(arg0, arg1, arg2, arg3, arg4, arg5);
     }
 
-    return handler(arg0, arg1, arg2, arg3, arg4, arg5);
+    if (action == SECCOMP_ACTION_LOG) {
+        seccomp_audit_record(tid, number, action, result);
+    }
+
+    return result;
 }
 
 int64_t syscall_dispatch_fastpath(const syscall_fastpath_frame_t *frame)
