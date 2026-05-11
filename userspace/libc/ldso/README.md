@@ -30,6 +30,8 @@ Current status:
   `pthread_attr_init`, `pthread_attr_destroy`, `pthread_attr_setstacksize`,
   `pthread_attr_getstacksize`
   (currently ENOSYS-style stubs, not `clone()`-backed threading yet).
+- `libc.so.6` and stage-0 resolver expose POSIX semaphore scaffolding APIs:
+  `sem_init`, `sem_destroy`, `sem_wait`, `sem_trywait`, `sem_post`, `sem_getvalue`.
 - The sysroot installer places:
   - loader at `/lib/ld-gnuos.so.1`
   - stub libc at `/usr/lib/libc.so.6` (and `/usr/lib/libc.so` for link-time lookup)

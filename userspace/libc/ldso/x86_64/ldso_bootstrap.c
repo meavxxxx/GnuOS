@@ -4,6 +4,7 @@
 #include <gnuos/tls.h>
 #include <link.h>
 #include <pthread.h>
+#include <semaphore.h>
 
 #include "ldso_dlfcn.h"
 #include "ldso_elf.h"
@@ -20,13 +21,16 @@
 #define LDSO_LD_PRELOAD_KEY "LD_PRELOAD="
 #define LDSO_LD_PRELOAD_KEY_LEN 11U
 #define LDSO_PRELOAD_TOKEN_MAX 128U
-#define LDSO_STAGE0_BUILTIN_SYMBOL_COUNT 21U
+#define LDSO_STAGE0_BUILTIN_SYMBOL_COUNT 27U
 
 #define GNUOS_PTHREAD_ENOSYS 38
 #define GNUOS_PTHREAD_EINVAL 22
 #define GNUOS_PTHREAD_MAIN_THREAD ((pthread_t)1UL)
 #define GNUOS_PTHREAD_STACK_MIN 16384UL
 #define GNUOS_PTHREAD_STACK_DEFAULT (2UL * 1024UL * 1024UL)
+#define GNUOS_SEM_EAGAIN 11
+#define GNUOS_SEM_EOVERFLOW 75
+#define GNUOS_SEM_VALUE_MAX 0x7FFFFFFFU
 
 typedef struct {
     uint64_t a_type;
@@ -326,6 +330,70 @@ int pthread_attr_getstacksize(const pthread_attr_t *attr, size_t *stacksize)
     return 0;
 }
 
+int sem_init(sem_t *sem, int pshared, unsigned int value)
+{
+    if (!sem) {
+        return GNUOS_PTHREAD_EINVAL;
+    }
+    if (pshared != 0) {
+        return GNUOS_PTHREAD_ENOSYS;
+    }
+
+    sem->__value = value;
+    return 0;
+}
+
+int sem_destroy(sem_t *sem)
+{
+    if (!sem) {
+        return GNUOS_PTHREAD_EINVAL;
+    }
+
+    sem->__value = 0U;
+    return 0;
+}
+
+int sem_wait(sem_t *sem)
+{
+    if (!sem) {
+        return GNUOS_PTHREAD_EINVAL;
+    }
+    if (sem->__value == 0U) {
+        return GNUOS_SEM_EAGAIN;
+    }
+
+    sem->__value--;
+    return 0;
+}
+
+int sem_trywait(sem_t *sem)
+{
+    return sem_wait(sem);
+}
+
+int sem_post(sem_t *sem)
+{
+    if (!sem) {
+        return GNUOS_PTHREAD_EINVAL;
+    }
+    if (sem->__value == GNUOS_SEM_VALUE_MAX) {
+        return GNUOS_SEM_EOVERFLOW;
+    }
+
+    sem->__value++;
+    return 0;
+}
+
+int sem_getvalue(sem_t *sem, int *sval)
+{
+    if (!sem || !sval) {
+        return GNUOS_PTHREAD_EINVAL;
+    }
+
+    *sval = (int)sem->__value;
+    return 0;
+}
+
 void __gnuos_store_startup(unsigned long argc, char **argv, char **envp)
 {
     (void)argc;
@@ -461,6 +529,18 @@ static int ldso_stage0_register_builtin_symbols(void)
     g_ldso_stage0_builtin_symbols[19].address = (uint64_t)(uintptr_t)pthread_attr_setstacksize;
     g_ldso_stage0_builtin_symbols[20].name = "pthread_attr_getstacksize";
     g_ldso_stage0_builtin_symbols[20].address = (uint64_t)(uintptr_t)pthread_attr_getstacksize;
+    g_ldso_stage0_builtin_symbols[21].name = "sem_init";
+    g_ldso_stage0_builtin_symbols[21].address = (uint64_t)(uintptr_t)sem_init;
+    g_ldso_stage0_builtin_symbols[22].name = "sem_destroy";
+    g_ldso_stage0_builtin_symbols[22].address = (uint64_t)(uintptr_t)sem_destroy;
+    g_ldso_stage0_builtin_symbols[23].name = "sem_wait";
+    g_ldso_stage0_builtin_symbols[23].address = (uint64_t)(uintptr_t)sem_wait;
+    g_ldso_stage0_builtin_symbols[24].name = "sem_trywait";
+    g_ldso_stage0_builtin_symbols[24].address = (uint64_t)(uintptr_t)sem_trywait;
+    g_ldso_stage0_builtin_symbols[25].name = "sem_post";
+    g_ldso_stage0_builtin_symbols[25].address = (uint64_t)(uintptr_t)sem_post;
+    g_ldso_stage0_builtin_symbols[26].name = "sem_getvalue";
+    g_ldso_stage0_builtin_symbols[26].address = (uint64_t)(uintptr_t)sem_getvalue;
 
     registered_primary = ldso_dlfcn_register_builtin_object(
         "stage0-builtins",

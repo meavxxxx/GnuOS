@@ -5,6 +5,7 @@
 #include <gnuos/tls.h>
 #include <link.h>
 #include <pthread.h>
+#include <semaphore.h>
 
 extern void gnuos_libc_stub_touch(void);
 
@@ -41,6 +42,8 @@ int main(int argc, char **argv, char **envp)
     void *thread_result = 0;
     pthread_attr_t attr;
     size_t stack_size = 0;
+    sem_t sem;
+    int sem_value = 0;
 
     gnuos_libc_stub_touch();
     tls_base = __gnuos_get_tls_base();
@@ -60,6 +63,13 @@ int main(int argc, char **argv, char **envp)
     (void)pthread_join(thread, &thread_result);
     (void)pthread_detach(thread);
     (void)pthread_attr_destroy(&attr);
+    (void)sem_init(&sem, 0, 1U);
+    (void)sem_wait(&sem);
+    (void)sem_post(&sem);
+    (void)sem_trywait(&sem);
+    (void)sem_getvalue(&sem, &sem_value);
+    (void)sem_value;
+    (void)sem_destroy(&sem);
 #endif
     return 0;
 }

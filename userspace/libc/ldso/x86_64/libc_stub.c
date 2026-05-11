@@ -2,6 +2,7 @@
 #include <gnuos/tls.h>
 #include <link.h>
 #include <pthread.h>
+#include <semaphore.h>
 
 #define GNUOS_AT_NULL 0UL
 #define GNUOS_AT_PHDR 3UL
@@ -19,6 +20,9 @@ static unsigned long g_tls_base_addr;
 #define GNUOS_PTHREAD_MAIN_THREAD ((pthread_t)1UL)
 #define GNUOS_PTHREAD_STACK_MIN 16384UL
 #define GNUOS_PTHREAD_STACK_DEFAULT (2UL * 1024UL * 1024UL)
+#define GNUOS_SEM_EAGAIN 11
+#define GNUOS_SEM_EOVERFLOW 75
+#define GNUOS_SEM_VALUE_MAX 0x7FFFFFFFU
 
 void gnuos_libc_stub_touch(void)
 {
@@ -270,6 +274,70 @@ int pthread_attr_getstacksize(const pthread_attr_t *attr, size_t *stacksize)
     }
 
     *stacksize = attr->__stack_size;
+    return 0;
+}
+
+int sem_init(sem_t *sem, int pshared, unsigned int value)
+{
+    if (!sem) {
+        return GNUOS_PTHREAD_EINVAL;
+    }
+    if (pshared != 0) {
+        return GNUOS_PTHREAD_ENOSYS;
+    }
+
+    sem->__value = value;
+    return 0;
+}
+
+int sem_destroy(sem_t *sem)
+{
+    if (!sem) {
+        return GNUOS_PTHREAD_EINVAL;
+    }
+
+    sem->__value = 0U;
+    return 0;
+}
+
+int sem_wait(sem_t *sem)
+{
+    if (!sem) {
+        return GNUOS_PTHREAD_EINVAL;
+    }
+    if (sem->__value == 0U) {
+        return GNUOS_SEM_EAGAIN;
+    }
+
+    sem->__value--;
+    return 0;
+}
+
+int sem_trywait(sem_t *sem)
+{
+    return sem_wait(sem);
+}
+
+int sem_post(sem_t *sem)
+{
+    if (!sem) {
+        return GNUOS_PTHREAD_EINVAL;
+    }
+    if (sem->__value == GNUOS_SEM_VALUE_MAX) {
+        return GNUOS_SEM_EOVERFLOW;
+    }
+
+    sem->__value++;
+    return 0;
+}
+
+int sem_getvalue(sem_t *sem, int *sval)
+{
+    if (!sem || !sval) {
+        return GNUOS_PTHREAD_EINVAL;
+    }
+
+    *sval = (int)sem->__value;
     return 0;
 }
 

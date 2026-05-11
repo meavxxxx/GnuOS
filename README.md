@@ -245,6 +245,7 @@
 - [x] Поддержка динамической линковки (ld.so / PT_INTERP)
 - [ ] POSIX threads (pthreads) поверх clone()
 - [x] Минимальный pthread ABI scaffolding (`<pthread.h>`, `pthread_*`/`pthread_attr_*` stubs)
+- [x] Минимальный POSIX semaphore ABI scaffolding (`<semaphore.h>`, `sem_*` stubs)
 - [x] Поддержка TLS (Thread-Local Storage, `%fs` base)
 - [x] Реализация `dl_iterate_phdr`, `backtrace()`
 
