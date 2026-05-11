@@ -1,0 +1,62 @@
+services:
+  database:
+    image: postgres:16-alpine
+    container_name: gnuos-mailman-db
+    environment:
+      POSTGRES_DB: ${MM_DB_NAME}
+      POSTGRES_USER: ${MM_DB_USER}
+      POSTGRES_PASSWORD: ${MM_DB_PASS}
+    volumes:
+      - ./data/postgres:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${MM_DB_USER} -d ${MM_DB_NAME}"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  redis:
+    image: redis:7-alpine
+    container_name: gnuos-mailman-redis
+    volumes:
+      - ./data/redis:/data
+
+  mailman-core:
+    image: maxking/mailman-core:latest
+    container_name: gnuos-mailman-core
+    depends_on:
+      database:
+        condition: service_healthy
+    environment:
+      DATABASE_TYPE: postgres
+      DATABASE_URL: postgres://${MM_DB_USER}:${MM_DB_PASS}@database:5432/${MM_DB_NAME}
+      HYPERKITTY_API_KEY: ${MM_HYPERKITTY_API_KEY}
+      MTA: exim
+    volumes:
+      - ./data/core:/opt/mailman
+
+  mailman-web:
+    image: maxking/mailman-web:latest
+    container_name: gnuos-mailman-web
+    depends_on:
+      database:
+        condition: service_healthy
+      redis:
+        condition: service_started
+      mailman-core:
+        condition: service_started
+    environment:
+      DATABASE_TYPE: postgres
+      DATABASE_URL: postgres://${MM_DB_USER}:${MM_DB_PASS}@database:5432/${MM_DB_NAME}
+      HYPERKITTY_API_KEY: ${MM_HYPERKITTY_API_KEY}
+      SECRET_KEY: ${MM_SECRET_KEY}
+      SERVE_FROM_DOMAIN: ${MM_DOMAIN}
+      MAILMAN_ADMIN_USER: ${MM_ADMIN_USER}
+      MAILMAN_ADMIN_EMAIL: ${MM_ADMIN_EMAIL}
+      MAILMAN_ADMIN_PASSWORD: ${MM_ADMIN_PASSWORD}
+      UWSGI_STATIC_MAP: /static=/opt/mailman-web-data/static
+      UWSGI_STATIC_EXPIRES_URI: /static
+      UWSGI_STATIC_EXPIRES_TYPE: image/png 2592000
+    volumes:
+      - ./data/web:/opt/mailman-web-data
+    ports:
+      - "127.0.0.1:8001:8000"

@@ -102,7 +102,7 @@
 - [x] Система RFC (Request for Comments) для архитектурных решений
 - [x] Кодекс участника (Code of Conduct)
 - [x] Документация для контрибьюторов (`CONTRIBUTING.md`)
-- [ ] Настройка mailing list (GNU Mailman)
+- [x] Настройка mailing list (GNU Mailman)
 
 #### 0.2 Кросс-компилятор и сборочная среда
 

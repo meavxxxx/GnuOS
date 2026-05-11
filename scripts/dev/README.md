@@ -26,3 +26,10 @@
 .\scripts\dev\docker-make.ps1 run
 ```
 
+## GNU Mailman (roadmap 0.1)
+
+```powershell
+Copy-Item .\scripts\dev\mailman\env.example .\scripts\dev\mailman\.env
+docker compose -f .\scripts\dev\mailman\docker-compose.yml --env-file .\scripts\dev\mailman\.env up -d
+```
+
