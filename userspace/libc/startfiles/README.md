@@ -3,6 +3,8 @@
 This directory contains minimal startup files for userspace ABI bring-up:
 
 - `crt0.S` provides `_start`, extracts `argc/argv/envp`, and calls `main`.
+- `crt0.S` also forwards startup triple (`argc/argv/envp`) into libc via weak
+  `__gnuos_store_startup` when available.
 - `crti.S` provides `_init`/`_fini` prologues.
 - `crtn.S` provides `_init`/`_fini` epilogues.
 

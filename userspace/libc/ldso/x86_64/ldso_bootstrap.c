@@ -1,5 +1,8 @@
 #include <stdint.h>
 
+#include <execinfo.h>
+#include <link.h>
+
 #include "ldso_dlfcn.h"
 #include "ldso_elf.h"
 
@@ -48,7 +51,7 @@ typedef struct {
 } ldso_stage0_state_t;
 
 volatile ldso_stage0_state_t g_ldso_stage0_state;
-static ldso_dlfcn_builtin_symbol_t g_ldso_stage0_builtin_symbols[6];
+static ldso_dlfcn_builtin_symbol_t g_ldso_stage0_builtin_symbols[9];
 
 static const uint64_t *ldso_stack_skip_argv(const uint64_t *cursor, uint64_t argc)
 {
@@ -207,6 +210,75 @@ static __attribute__((noreturn)) void ldso_builtin_exit(void)
     }
 }
 
+void __gnuos_store_startup(unsigned long argc, char **argv, char **envp)
+{
+    (void)argc;
+    (void)argv;
+    (void)envp;
+}
+
+int dl_iterate_phdr(int (*callback)(struct dl_phdr_info *info, size_t size, void *data), void *data)
+{
+    struct dl_phdr_info info;
+
+    if (!callback) {
+        return -1;
+    }
+    if (g_ldso_stage0_state.at_phdr == 0U ||
+        g_ldso_stage0_state.at_phnum == 0U ||
+        g_ldso_stage0_state.at_phent != sizeof(ldso_elf_phdr_t)) {
+        return -1;
+    }
+
+    info.dlpi_addr = g_ldso_stage0_state.load_bias;
+    info.dlpi_name = "";
+    info.dlpi_phdr = (const Elf64_Phdr *)(uintptr_t)g_ldso_stage0_state.at_phdr;
+    info.dlpi_phnum = (Elf64_Half)g_ldso_stage0_state.at_phnum;
+    return callback(&info, sizeof(info), data);
+}
+
+int backtrace(void **buffer, int size)
+{
+    void **frame;
+    int count = 0;
+
+    if (!buffer || size <= 0) {
+        return 0;
+    }
+
+    frame = (void **)__builtin_frame_address(0);
+    while (frame && count < size) {
+        void *return_address;
+        void **next_frame;
+        uint64_t frame_addr;
+        uint64_t next_addr;
+
+        return_address = frame[1];
+        if (!return_address) {
+            break;
+        }
+        buffer[count++] = return_address;
+
+        next_frame = (void **)frame[0];
+        if (!next_frame) {
+            break;
+        }
+
+        frame_addr = (uint64_t)(uintptr_t)frame;
+        next_addr = (uint64_t)(uintptr_t)next_frame;
+        if (next_addr <= frame_addr) {
+            break;
+        }
+        if ((next_addr - frame_addr) > (1ULL << 20U)) {
+            break;
+        }
+
+        frame = next_frame;
+    }
+
+    return count;
+}
+
 static int ldso_stage0_resolve_symbol(const char *name, uint64_t *address, void *context)
 {
     void *resolved = 0;
@@ -243,15 +315,21 @@ static int ldso_stage0_register_builtin_symbols(void)
     g_ldso_stage0_builtin_symbols[4].address = (uint64_t)(uintptr_t)ldso_dlclose;
     g_ldso_stage0_builtin_symbols[5].name = "dlerror";
     g_ldso_stage0_builtin_symbols[5].address = (uint64_t)(uintptr_t)ldso_dlerror;
+    g_ldso_stage0_builtin_symbols[6].name = "__gnuos_store_startup";
+    g_ldso_stage0_builtin_symbols[6].address = (uint64_t)(uintptr_t)__gnuos_store_startup;
+    g_ldso_stage0_builtin_symbols[7].name = "dl_iterate_phdr";
+    g_ldso_stage0_builtin_symbols[7].address = (uint64_t)(uintptr_t)dl_iterate_phdr;
+    g_ldso_stage0_builtin_symbols[8].name = "backtrace";
+    g_ldso_stage0_builtin_symbols[8].address = (uint64_t)(uintptr_t)backtrace;
 
     registered_primary = ldso_dlfcn_register_builtin_object(
         "stage0-builtins",
         g_ldso_stage0_builtin_symbols,
-        6U);
+        9U);
     registered_alias = ldso_dlfcn_register_builtin_object(
         "libc.so.6",
         g_ldso_stage0_builtin_symbols,
-        6U);
+        9U);
 
     if (registered_primary != 0 || registered_alias != 0) {
         return -1;

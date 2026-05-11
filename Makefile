@@ -56,7 +56,8 @@ USER_SMOKE_DYNAMIC_ELF := $(BUILD_DIR)/userspace/init/init_minimal.dynamic.elf
 USER_HEADERS_DIR := userspace/libc/include
 USER_SYSROOT_DIR := $(BUILD_DIR)/sysroot/$(GNUOS_TARGET)
 USER_CFLAGS := -std=$(CSTD) -O2 -g -ffreestanding -fno-stack-protector -fno-pie \
-	-Wall -Wextra -Wpedantic --sysroot=$(USER_SYSROOT_DIR) -isystem $(USER_SYSROOT_DIR)/usr/include
+	-Wall -Wextra -Wpedantic --sysroot=$(USER_SYSROOT_DIR) -isystem $(USER_SYSROOT_DIR)/usr/include \
+	-I$(USER_HEADERS_DIR)
 USER_LDSO_CFLAGS := $(USER_CFLAGS) -fPIC -Iuserspace/libc/ldso
 
 COMMON_CFLAGS := -std=$(CSTD) -O2 -g -ffreestanding -fno-stack-protector -fno-pie \

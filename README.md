@@ -245,7 +245,7 @@
 - [x] Поддержка динамической линковки (ld.so / PT_INTERP)
 - [ ] POSIX threads (pthreads) поверх clone()
 - [ ] Поддержка TLS (Thread-Local Storage, `%fs` base)
-- [ ] Реализация `dl_iterate_phdr`, `backtrace()`
+- [x] Реализация `dl_iterate_phdr`, `backtrace()`
 
 #### 2.3 Динамический компоновщик
 

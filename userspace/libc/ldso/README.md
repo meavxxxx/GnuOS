@@ -21,6 +21,7 @@ Current status:
 - Dynamic smoke executable includes both `DT_INIT` and `DT_INIT_ARRAY`.
 - `userspace/libc/include/dlfcn.h` is present for userspace ABI scaffolding.
 - `LD_PRELOAD` stage-0 support currently resolves pre-registered object names only.
+- `libc.so.6` stub now exports `dl_iterate_phdr` and `backtrace` scaffolding APIs.
 - The sysroot installer places:
   - loader at `/lib/ld-gnuos.so.1`
   - stub libc at `/usr/lib/libc.so.6` (and `/usr/lib/libc.so` for link-time lookup)
