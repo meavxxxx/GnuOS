@@ -13,7 +13,7 @@
 11. Core low-level subsystems are initialized (PS/2 keyboard, PCI/MSI scan, ISA DMA, capability table, SHM/IPC channels, syscall table, syscall/sysret fast-path MSRs, uaccess checks, seccomp-style audit filter).
 12. PIC is remapped, PIT timer is configured, IRQ0/IRQ1 are unmasked, and hardware interrupts are enabled.
 13. Scheduler dispatches kernel tasks using saved/restored task contexts.
-14. Demo tasks exercise RCU grace periods and IPC (queued + rendezvous + capability transfer + SHM handoff).
+14. Demo tasks exercise RCU grace periods and IPC (queued + rendezvous + capability transfer + SHM handoff); syscall selftests run during bootstrap.
 15. CPU falls back to idle (`hlt`) only when no runnable task is available.
 
 This is intentionally minimal and acts as phase-0/1 scaffolding.

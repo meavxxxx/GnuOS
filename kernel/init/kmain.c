@@ -360,6 +360,7 @@ void kmain(uint64_t boot_magic, uint64_t boot_info_addr)
     uint64_t shm_reader_size = 0U;
     int64_t syscall_gettid_result = 0LL;
     int64_t syscall_unknown_result = 0LL;
+    int64_t syscall_yield_result = 0LL;
     int64_t syscall_userptr_bad_result = 0LL;
     int64_t syscall_userptr_good_result = -1LL;
     uint64_t syscall_user_tid_value = 0U;
@@ -368,6 +369,8 @@ void kmain(uint64_t boot_magic, uint64_t boot_info_addr)
     uint64_t syscall_seccomp_audit_total = 0U;
     seccomp_audit_event_t syscall_seccomp_last_event;
     int syscall_seccomp_have_last = 0;
+    uint64_t syscall_selftest_passed = 0U;
+    uint64_t syscall_selftest_failed = 0U;
     uint8_t syscall_fastpath_ready = 0U;
     uint64_t syscall_user_page_virt = 0x0000000080000000ULL;
     void *syscall_user_page = NULL;
@@ -468,11 +471,13 @@ void kmain(uint64_t boot_magic, uint64_t boot_info_addr)
     }
     serial_write("GNU OS: IRQ0 timer and IRQ1 keyboard unmasked; interrupts enabled.\n");
     syscall_gettid_result = syscall_dispatch(SYS_GETTID, 0U, 0U, 0U, 0U, 0U, 0U);
+    syscall_yield_result = syscall_dispatch(SYS_SCHED_YIELD, 0U, 0U, 0U, 0U, 0U, 0U);
     syscall_unknown_result = syscall_dispatch(511U, 0U, 0U, 0U, 0U, 0U, 0U);
     syscall_fastpath_ready = x86_64_syscall_fastpath_ready();
     kprintf(
-        "GNU OS: syscall demo gettid=%d unknown=%d registered=%u fastpath=%u\n",
+        "GNU OS: syscall demo gettid=%d yield=%d unknown=%d registered=%u fastpath=%u\n",
         syscall_gettid_result,
+        syscall_yield_result,
         syscall_unknown_result,
         (uint64_t)syscall_registered_count(),
         (uint64_t)syscall_fastpath_ready);
@@ -540,6 +545,38 @@ void kmain(uint64_t boot_magic, uint64_t boot_info_addr)
     }
     (void)seccomp_set_syscall_action(SYS_GETTID, SECCOMP_ACTION_ALLOW);
     (void)seccomp_set_syscall_action(SYS_SCHED_YIELD, SECCOMP_ACTION_ALLOW);
+
+    if (syscall_gettid_result == 0LL) {
+        syscall_selftest_passed++;
+    } else {
+        syscall_selftest_failed++;
+    }
+    if (syscall_yield_result == 0LL) {
+        syscall_selftest_passed++;
+    } else {
+        syscall_selftest_failed++;
+    }
+    if (syscall_userptr_bad_result == -14LL) {
+        syscall_selftest_passed++;
+    } else {
+        syscall_selftest_failed++;
+    }
+    if (syscall_userptr_good_result == 0LL && syscall_user_tid_value == 0U) {
+        syscall_selftest_passed++;
+    } else {
+        syscall_selftest_failed++;
+    }
+    if (syscall_seccomp_log_result == 0LL &&
+        syscall_seccomp_deny_result == -1LL &&
+        syscall_seccomp_audit_total >= 2U) {
+        syscall_selftest_passed++;
+    } else {
+        syscall_selftest_failed++;
+    }
+    kprintf(
+        "GNU OS: syscall selftests passed=%u failed=%u\n",
+        syscall_selftest_passed,
+        syscall_selftest_failed);
 
     ipc_boot_channel = ipc_channel_create("boot-log");
     if (ipc_boot_channel >= 0) {
