@@ -1,3 +1,4 @@
+#include <arpa/inet.h>
 #include <execinfo.h>
 #include <gnuos/tls.h>
 #include <link.h>

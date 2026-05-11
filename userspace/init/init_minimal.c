@@ -7,6 +7,7 @@
 #include <pthread.h>
 #include <semaphore.h>
 #include <signal.h>
+#include <arpa/inet.h>
 #include <sys/socket.h>
 
 extern void gnuos_libc_stub_touch(void);
@@ -54,6 +55,10 @@ int main(int argc, char **argv, char **envp)
     int sockfd = -1;
     struct sockaddr loop_addr;
     char socket_buf[8] = {0};
+    in_addr_t loop_addr_be = 0;
+    in_port_t loop_port_be = 0;
+    char inet_text[16] = "127.0.0.1";
+    char inet_out[64];
 
     gnuos_libc_stub_touch();
     tls_base = __gnuos_get_tls_base();
@@ -97,6 +102,13 @@ int main(int argc, char **argv, char **envp)
     (void)kill(0, SIGTERM);
     sockfd = socket(AF_INET, SOCK_STREAM, 0);
     if (sockfd >= 0) {
+        loop_port_be = htons(1234U);
+        loop_port_be = ntohs(loop_port_be);
+        loop_addr_be = htonl(INADDR_LOOPBACK);
+        loop_addr_be = ntohl(loop_addr_be);
+        (void)inet_pton(AF_INET, inet_text, &loop_addr_be);
+        (void)inet_ntop(AF_INET, &loop_addr_be, inet_out, sizeof(inet_out));
+        (void)loop_port_be;
         loop_addr.sa_family = AF_INET;
         loop_addr.sa_data[0] = 0;
         loop_addr.sa_data[1] = 0;

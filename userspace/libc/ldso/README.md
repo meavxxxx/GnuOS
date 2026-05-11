@@ -37,7 +37,8 @@ Current status:
   `sigaction`, `sigprocmask`, `kill`, `raise`, `signal`.
 - `libc.so.6` and stage-0 resolver expose socket scaffolding APIs:
   `socket`, `bind`, `listen`, `accept`, `connect`, `send`, `recv`,
-  `sendto`, `recvfrom`, `shutdown`.
+  `sendto`, `recvfrom`, `shutdown`, `htons`, `ntohs`, `htonl`, `ntohl`,
+  `inet_pton`, `inet_ntop`.
 - The sysroot installer places:
   - loader at `/lib/ld-gnuos.so.1`
   - stub libc at `/usr/lib/libc.so.6` (and `/usr/lib/libc.so` for link-time lookup)

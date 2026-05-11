@@ -1,5 +1,6 @@
 #include <stdint.h>
 
+#include <arpa/inet.h>
 #include <execinfo.h>
 #include <gnuos/tls.h>
 #include <link.h>
@@ -24,7 +25,7 @@
 #define LDSO_LD_PRELOAD_KEY "LD_PRELOAD="
 #define LDSO_LD_PRELOAD_KEY_LEN 11U
 #define LDSO_PRELOAD_TOKEN_MAX 128U
-#define LDSO_STAGE0_BUILTIN_SYMBOL_COUNT 47U
+#define LDSO_STAGE0_BUILTIN_SYMBOL_COUNT 53U
 
 #define GNUOS_PTHREAD_ENOSYS 38
 #define GNUOS_PTHREAD_EINVAL 22
@@ -977,6 +978,18 @@ static int ldso_stage0_register_builtin_symbols(void)
     g_ldso_stage0_builtin_symbols[45].address = (uint64_t)(uintptr_t)recvfrom;
     g_ldso_stage0_builtin_symbols[46].name = "shutdown";
     g_ldso_stage0_builtin_symbols[46].address = (uint64_t)(uintptr_t)shutdown;
+    g_ldso_stage0_builtin_symbols[47].name = "htons";
+    g_ldso_stage0_builtin_symbols[47].address = (uint64_t)(uintptr_t)htons;
+    g_ldso_stage0_builtin_symbols[48].name = "ntohs";
+    g_ldso_stage0_builtin_symbols[48].address = (uint64_t)(uintptr_t)ntohs;
+    g_ldso_stage0_builtin_symbols[49].name = "htonl";
+    g_ldso_stage0_builtin_symbols[49].address = (uint64_t)(uintptr_t)htonl;
+    g_ldso_stage0_builtin_symbols[50].name = "ntohl";
+    g_ldso_stage0_builtin_symbols[50].address = (uint64_t)(uintptr_t)ntohl;
+    g_ldso_stage0_builtin_symbols[51].name = "inet_pton";
+    g_ldso_stage0_builtin_symbols[51].address = (uint64_t)(uintptr_t)inet_pton;
+    g_ldso_stage0_builtin_symbols[52].name = "inet_ntop";
+    g_ldso_stage0_builtin_symbols[52].address = (uint64_t)(uintptr_t)inet_ntop;
 
     registered_primary = ldso_dlfcn_register_builtin_object(
         "stage0-builtins",
