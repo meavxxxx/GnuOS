@@ -34,9 +34,18 @@ USER_STARTFILES_SOURCES := \
 	$(USER_STARTFILES_DIR)/crtn.S
 USER_STARTFILES_OBJECTS := \
 	$(patsubst $(USER_STARTFILES_DIR)/%.S,$(BUILD_DIR)/$(USER_STARTFILES_DIR)/%.o,$(USER_STARTFILES_SOURCES))
+USER_LDSO_DIR := userspace/libc/ldso/$(ARCH)
+USER_LDSO_SOURCE := $(USER_LDSO_DIR)/ldso_start.S
+USER_LDSO_OBJECT := $(BUILD_DIR)/$(USER_LDSO_SOURCE:.S=.o)
+USER_LDSO_ELF := $(BUILD_DIR)/userspace/libc/ldso/ld-gnuos.so.1
+USER_LIBC_STUB_SOURCE := $(USER_LDSO_DIR)/libc_stub.c
+USER_LIBC_STUB_OBJECT := $(BUILD_DIR)/$(USER_LDSO_DIR)/libc_stub.pic.o
+USER_LIBC_SO := $(BUILD_DIR)/userspace/libc/libc.so.6
 USER_SMOKE_SOURCE := userspace/init/init_minimal.c
 USER_SMOKE_OBJECT := $(BUILD_DIR)/$(USER_SMOKE_SOURCE:.c=.o)
+USER_SMOKE_DYNAMIC_OBJECT := $(BUILD_DIR)/userspace/init/init_minimal.dynamic.o
 USER_SMOKE_ELF := $(BUILD_DIR)/userspace/init/init_minimal.elf
+USER_SMOKE_DYNAMIC_ELF := $(BUILD_DIR)/userspace/init/init_minimal.dynamic.elf
 USER_HEADERS_DIR := userspace/libc/include
 USER_SYSROOT_DIR := $(BUILD_DIR)/sysroot/$(GNUOS_TARGET)
 USER_CFLAGS := -std=$(CSTD) -O2 -g -ffreestanding -fno-stack-protector -fno-pie \
@@ -74,8 +83,10 @@ KERNEL_OBJECTS := \
 	$(patsubst %.c,$(BUILD_DIR)/%.o,$(KERNEL_C_SOURCES) $(ARCH_C_SOURCES)) \
 	$(patsubst %.S,$(BUILD_DIR)/%.o,$(ARCH_ASM_SOURCES))
 KERNEL_DEPS := $(KERNEL_OBJECTS:.o=.d)
+USER_DEPS := $(USER_STARTFILES_OBJECTS:.o=.d) $(USER_SMOKE_OBJECT:.o=.d) \
+	$(USER_SMOKE_DYNAMIC_OBJECT:.o=.d) $(USER_LDSO_OBJECT:.o=.d) $(USER_LIBC_STUB_OBJECT:.o=.d)
 
-.PHONY: all kernel userspace userspace-startfiles userspace-sysroot userspace-smoke image iso run run-debug test check-posix docs clean
+.PHONY: all kernel userspace userspace-startfiles userspace-ldso userspace-libc-stub userspace-sysroot userspace-smoke userspace-smoke-static userspace-smoke-dynamic image iso run run-debug test check-posix docs clean
 
 all: kernel
 
@@ -113,17 +124,35 @@ userspace-startfiles: $(USER_STARTFILES_OBJECTS)
 	@echo "GNU OS userspace start files built:"
 	@for obj in $(USER_STARTFILES_OBJECTS); do echo "  $$obj"; done
 
-userspace-sysroot: userspace-startfiles
-	bash scripts/toolchain/install-gnuos-sysroot.sh \
-		ARCH=$(ARCH) \
-		TARGET=$(GNUOS_TARGET) \
-		BUILD_DIR=$(BUILD_DIR) \
-		SYSROOT=$(USER_SYSROOT_DIR) \
-		HEADERS_DIR=$(USER_HEADERS_DIR) \
-		STARTFILES_DIR=$(BUILD_DIR)/$(USER_STARTFILES_DIR)
+userspace-ldso: $(USER_LDSO_ELF)
+	@echo "GNU OS userspace dynamic loader: $(USER_LDSO_ELF)"
 
-userspace-smoke: userspace-sysroot $(USER_SMOKE_ELF)
+userspace-libc-stub: $(USER_LIBC_SO)
+	@echo "GNU OS userspace shared libc stub: $(USER_LIBC_SO)"
+
+userspace-sysroot: userspace-startfiles userspace-ldso userspace-libc-stub
+	ARCH=$(ARCH) TARGET=$(GNUOS_TARGET) BUILD_DIR=$(BUILD_DIR) SYSROOT=$(USER_SYSROOT_DIR) \
+	HEADERS_DIR=$(USER_HEADERS_DIR) STARTFILES_DIR=$(BUILD_DIR)/$(USER_STARTFILES_DIR) \
+	LDSO_FILE=$(USER_LDSO_ELF) LIBC_SO_FILE=$(USER_LIBC_SO) \
+	bash scripts/toolchain/install-gnuos-sysroot.sh
+
+userspace-smoke: userspace-smoke-static userspace-smoke-dynamic
 	@echo "GNU OS userspace smoke ELF: $(USER_SMOKE_ELF)"
+	@echo "GNU OS userspace smoke ELF (PT_INTERP): $(USER_SMOKE_DYNAMIC_ELF)"
+
+userspace-smoke-static: userspace-sysroot $(USER_SMOKE_ELF)
+
+userspace-smoke-dynamic: userspace-sysroot $(USER_SMOKE_DYNAMIC_ELF)
+
+$(USER_LDSO_ELF): $(USER_LDSO_OBJECT)
+	@mkdir -p $(dir $@)
+	$(CC) -nostdlib -shared -Wl,--build-id=none,-soname,ld-gnuos.so.1,-e,_start -o $@ \
+		$(USER_LDSO_OBJECT)
+
+$(USER_LIBC_SO): $(USER_LIBC_STUB_OBJECT)
+	@mkdir -p $(dir $@)
+	$(CC) -nostdlib -shared -Wl,--build-id=none,-soname,libc.so.6 -o $@ \
+		$(USER_LIBC_STUB_OBJECT)
 
 $(USER_SMOKE_ELF): $(USER_SMOKE_OBJECT) userspace-sysroot
 	@mkdir -p $(dir $@)
@@ -133,9 +162,26 @@ $(USER_SMOKE_ELF): $(USER_SMOKE_OBJECT) userspace-sysroot
 		$(USER_SMOKE_OBJECT) \
 		$(USER_SYSROOT_DIR)/usr/lib/crtn.o
 
+$(USER_SMOKE_DYNAMIC_ELF): $(USER_SMOKE_DYNAMIC_OBJECT) userspace-sysroot
+	@mkdir -p $(dir $@)
+	$(CC) -nostdlib -no-pie -Wl,--build-id=none,--dynamic-linker=/lib/ld-gnuos.so.1 -o $@ \
+		$(USER_SYSROOT_DIR)/usr/lib/crt0.o \
+		$(USER_SYSROOT_DIR)/usr/lib/crti.o \
+		$(USER_SMOKE_DYNAMIC_OBJECT) \
+		-L$(USER_SYSROOT_DIR)/usr/lib -Wl,-rpath-link,$(USER_SYSROOT_DIR)/usr/lib -lc \
+		$(USER_SYSROOT_DIR)/usr/lib/crtn.o
+
 $(USER_SMOKE_OBJECT): $(USER_SMOKE_SOURCE) userspace-sysroot
 	@mkdir -p $(dir $@)
 	$(CC) $(USER_CFLAGS) -MMD -MP -c $< -o $@
+
+$(USER_SMOKE_DYNAMIC_OBJECT): $(USER_SMOKE_SOURCE) userspace-sysroot
+	@mkdir -p $(dir $@)
+	$(CC) $(USER_CFLAGS) -DGNUOS_DYNAMIC_SMOKE -MMD -MP -c $< -o $@
+
+$(USER_LIBC_STUB_OBJECT): $(USER_LIBC_STUB_SOURCE)
+	@mkdir -p $(dir $@)
+	$(CC) $(USER_CFLAGS) -fPIC -MMD -MP -c $< -o $@
 
 test:
 	@echo "Tests are not wired yet. Add unit/integration targets in tests/."
@@ -150,3 +196,4 @@ clean:
 	$(RM) -r $(BUILD_DIR)
 
 -include $(KERNEL_DEPS)
+-include $(USER_DEPS)

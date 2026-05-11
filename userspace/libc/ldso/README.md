@@ -1,0 +1,14 @@
+# GNU OS dynamic loader scaffold
+
+This directory hosts early dynamic-linker scaffolding for userspace ABI bring-up.
+
+- `x86_64/ldso_start.S` provides a stage-0 entrypoint for `ld-gnuos.so.1`.
+- `x86_64/libc_stub.c` provides a minimal shared `libc.so.6` stub used by smoke tests.
+
+Current status:
+
+- `make userspace` builds `ld-gnuos.so.1` and a smoke executable with
+  `PT_INTERP=/lib/ld-gnuos.so.1`.
+- The sysroot installer places:
+  - loader at `/lib/ld-gnuos.so.1`
+  - stub libc at `/usr/lib/libc.so.6` (and `/usr/lib/libc.so` for link-time lookup)
