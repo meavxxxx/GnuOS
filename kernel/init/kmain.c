@@ -18,6 +18,7 @@
 #include <gnuos/serial.h>
 #include <gnuos/shm.h>
 #include <gnuos/spinlock.h>
+#include <gnuos/syscall.h>
 #include <gnuos/vmm.h>
 
 #define VGA_WIDTH 80
@@ -356,6 +357,8 @@ void kmain(uint64_t boot_magic, uint64_t boot_info_addr)
     void *shm_reader_address = NULL;
     uint64_t shm_writer_size = 0U;
     uint64_t shm_reader_size = 0U;
+    int64_t syscall_gettid_result = 0LL;
+    int64_t syscall_unknown_result = 0LL;
     task_t *current_task = NULL;
     task_t *rcu_reader_task = NULL;
     task_t *rcu_updater_task = NULL;
@@ -424,6 +427,7 @@ void kmain(uint64_t boot_magic, uint64_t boot_info_addr)
     capability_init();
     shm_init();
     ipc_init();
+    syscall_init();
     pic_clear_mask(0U);
     pic_clear_mask(1U);
     pit_init(100U);
@@ -449,6 +453,13 @@ void kmain(uint64_t boot_magic, uint64_t boot_info_addr)
         serial_write("GNU OS: current task tid: (null)\n");
     }
     serial_write("GNU OS: IRQ0 timer and IRQ1 keyboard unmasked; interrupts enabled.\n");
+    syscall_gettid_result = syscall_dispatch(SYS_GETTID, 0U, 0U, 0U, 0U, 0U, 0U);
+    syscall_unknown_result = syscall_dispatch(511U, 0U, 0U, 0U, 0U, 0U, 0U);
+    kprintf(
+        "GNU OS: syscall demo gettid=%d unknown=%d registered=%u\n",
+        syscall_gettid_result,
+        syscall_unknown_result,
+        (uint64_t)syscall_registered_count());
 
     ipc_boot_channel = ipc_channel_create("boot-log");
     if (ipc_boot_channel >= 0) {
