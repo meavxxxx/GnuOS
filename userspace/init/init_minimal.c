@@ -7,6 +7,7 @@
 #include <pthread.h>
 #include <semaphore.h>
 #include <signal.h>
+#include <sys/socket.h>
 
 extern void gnuos_libc_stub_touch(void);
 
@@ -50,6 +51,9 @@ int main(int argc, char **argv, char **envp)
     struct sigaction sigact;
     struct sigaction sigoldact;
     int sig_member = 0;
+    int sockfd = -1;
+    struct sockaddr loop_addr;
+    char socket_buf[8] = {0};
 
     gnuos_libc_stub_touch();
     tls_base = __gnuos_get_tls_base();
@@ -91,6 +95,18 @@ int main(int argc, char **argv, char **envp)
     (void)signal(SIGUSR2, SIG_DFL);
     (void)raise(SIGUSR1);
     (void)kill(0, SIGTERM);
+    sockfd = socket(AF_INET, SOCK_STREAM, 0);
+    if (sockfd >= 0) {
+        loop_addr.sa_family = AF_INET;
+        loop_addr.sa_data[0] = 0;
+        loop_addr.sa_data[1] = 0;
+        (void)bind(sockfd, &loop_addr, sizeof(loop_addr));
+        (void)listen(sockfd, 1);
+        (void)connect(sockfd, &loop_addr, sizeof(loop_addr));
+        (void)send(sockfd, socket_buf, sizeof(socket_buf), 0);
+        (void)recv(sockfd, socket_buf, sizeof(socket_buf), 0);
+        (void)shutdown(sockfd, SHUT_RDWR);
+    }
 #endif
     return 0;
 }

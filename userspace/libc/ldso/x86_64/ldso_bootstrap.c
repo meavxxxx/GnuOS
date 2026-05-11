@@ -3,9 +3,11 @@
 #include <execinfo.h>
 #include <gnuos/tls.h>
 #include <link.h>
+#include <netinet/in.h>
 #include <pthread.h>
 #include <semaphore.h>
 #include <signal.h>
+#include <sys/socket.h>
 
 #include "ldso_dlfcn.h"
 #include "ldso_elf.h"
@@ -22,7 +24,7 @@
 #define LDSO_LD_PRELOAD_KEY "LD_PRELOAD="
 #define LDSO_LD_PRELOAD_KEY_LEN 11U
 #define LDSO_PRELOAD_TOKEN_MAX 128U
-#define LDSO_STAGE0_BUILTIN_SYMBOL_COUNT 37U
+#define LDSO_STAGE0_BUILTIN_SYMBOL_COUNT 47U
 
 #define GNUOS_PTHREAD_ENOSYS 38
 #define GNUOS_PTHREAD_EINVAL 22
@@ -33,6 +35,13 @@
 #define GNUOS_SEM_EOVERFLOW 75
 #define GNUOS_SEM_VALUE_MAX 0x7FFFFFFFU
 #define GNUOS_SIGNAL_NSIG NSIG
+#define GNUOS_SOCKET_EMFILE 24
+#define GNUOS_SOCKET_EPROTONOSUPPORT 93
+#define GNUOS_SOCKET_ENOTSOCK 88
+#define GNUOS_SOCKET_EAFNOSUPPORT 97
+#define GNUOS_SOCKET_EOPNOTSUPP 95
+#define GNUOS_SOCKET_FD_BASE 3
+#define GNUOS_SOCKET_MAX 32
 
 typedef struct {
     uint64_t a_type;
@@ -71,6 +80,16 @@ static uintptr_t g_ldso_stage0_tls_storage[64];
 static uintptr_t g_ldso_stage0_tls_base;
 static sigset_t g_signal_mask;
 static struct sigaction g_signal_actions[GNUOS_SIGNAL_NSIG];
+typedef struct {
+    int in_use;
+    int domain;
+    int type;
+    int protocol;
+    int connected;
+    int listening;
+    int shutdown_how;
+} gnuos_socket_entry_t;
+static gnuos_socket_entry_t g_socket_table[GNUOS_SOCKET_MAX];
 
 static const uint64_t *ldso_stack_skip_argv(const uint64_t *cursor, uint64_t argc)
 {
@@ -398,6 +417,245 @@ int sem_getvalue(sem_t *sem, int *sval)
     return 0;
 }
 
+static int gnuos_socket_supported_domain(int domain)
+{
+    return domain == AF_UNSPEC || domain == AF_UNIX || domain == AF_INET || domain == AF_INET6;
+}
+
+static int gnuos_socket_supported_type(int type)
+{
+    int base_type = type & 0x0F;
+    return base_type == SOCK_STREAM || base_type == SOCK_DGRAM || base_type == SOCK_RAW;
+}
+
+static gnuos_socket_entry_t *gnuos_socket_get(int sockfd)
+{
+    int index = sockfd - GNUOS_SOCKET_FD_BASE;
+
+    if (index < 0 || index >= GNUOS_SOCKET_MAX) {
+        return 0;
+    }
+    if (!g_socket_table[index].in_use) {
+        return 0;
+    }
+
+    return &g_socket_table[index];
+}
+
+static int gnuos_socket_alloc_fd(void)
+{
+    int index;
+
+    for (index = 0; index < GNUOS_SOCKET_MAX; index++) {
+        if (!g_socket_table[index].in_use) {
+            g_socket_table[index].in_use = 1;
+            g_socket_table[index].domain = AF_UNSPEC;
+            g_socket_table[index].type = 0;
+            g_socket_table[index].protocol = 0;
+            g_socket_table[index].connected = 0;
+            g_socket_table[index].listening = 0;
+            g_socket_table[index].shutdown_how = -1;
+            return GNUOS_SOCKET_FD_BASE + index;
+        }
+    }
+
+    return -1;
+}
+
+in_port_t htons(in_port_t hostshort)
+{
+    return (in_port_t)((hostshort >> 8) | (hostshort << 8));
+}
+
+in_port_t ntohs(in_port_t netshort)
+{
+    return htons(netshort);
+}
+
+in_addr_t htonl(in_addr_t hostlong)
+{
+    return ((hostlong & 0x000000FFU) << 24) |
+        ((hostlong & 0x0000FF00U) << 8) |
+        ((hostlong & 0x00FF0000U) >> 8) |
+        ((hostlong & 0xFF000000U) >> 24);
+}
+
+in_addr_t ntohl(in_addr_t netlong)
+{
+    return htonl(netlong);
+}
+
+const char *inet_ntop(int af, const void *src, char *dst, socklen_t size)
+{
+    (void)af;
+    (void)src;
+    (void)dst;
+    (void)size;
+    return 0;
+}
+
+int inet_pton(int af, const char *src, void *dst)
+{
+    (void)af;
+    (void)src;
+    (void)dst;
+    return GNUOS_PTHREAD_ENOSYS;
+}
+
+int socket(int domain, int type, int protocol)
+{
+    int sockfd;
+    gnuos_socket_entry_t *entry;
+
+    if (!gnuos_socket_supported_domain(domain)) {
+        return -GNUOS_SOCKET_EAFNOSUPPORT;
+    }
+    if (!gnuos_socket_supported_type(type)) {
+        return -GNUOS_SOCKET_EPROTONOSUPPORT;
+    }
+
+    sockfd = gnuos_socket_alloc_fd();
+    if (sockfd < 0) {
+        return -GNUOS_SOCKET_EMFILE;
+    }
+
+    entry = gnuos_socket_get(sockfd);
+    entry->domain = domain;
+    entry->type = type;
+    entry->protocol = protocol;
+    return sockfd;
+}
+
+int bind(int sockfd, const struct sockaddr *addr, socklen_t addrlen)
+{
+    gnuos_socket_entry_t *entry = gnuos_socket_get(sockfd);
+    (void)addr;
+    (void)addrlen;
+
+    if (!entry) {
+        return -GNUOS_SOCKET_ENOTSOCK;
+    }
+
+    return 0;
+}
+
+int listen(int sockfd, int backlog)
+{
+    gnuos_socket_entry_t *entry = gnuos_socket_get(sockfd);
+    (void)backlog;
+
+    if (!entry) {
+        return -GNUOS_SOCKET_ENOTSOCK;
+    }
+
+    entry->listening = 1;
+    return 0;
+}
+
+int accept(int sockfd, struct sockaddr *addr, socklen_t *addrlen)
+{
+    gnuos_socket_entry_t *entry = gnuos_socket_get(sockfd);
+    (void)addr;
+    (void)addrlen;
+
+    if (!entry) {
+        return -GNUOS_SOCKET_ENOTSOCK;
+    }
+    if (!entry->listening) {
+        return -GNUOS_SOCKET_EOPNOTSUPP;
+    }
+
+    return -GNUOS_PTHREAD_ENOSYS;
+}
+
+int connect(int sockfd, const struct sockaddr *addr, socklen_t addrlen)
+{
+    gnuos_socket_entry_t *entry = gnuos_socket_get(sockfd);
+    (void)addr;
+    (void)addrlen;
+
+    if (!entry) {
+        return -GNUOS_SOCKET_ENOTSOCK;
+    }
+
+    entry->connected = 1;
+    return 0;
+}
+
+ssize_t send(int sockfd, const void *buf, size_t len, int flags)
+{
+    gnuos_socket_entry_t *entry = gnuos_socket_get(sockfd);
+    (void)buf;
+    (void)flags;
+
+    if (!entry) {
+        return -GNUOS_SOCKET_ENOTSOCK;
+    }
+    if (!entry->connected) {
+        return -GNUOS_SOCKET_EOPNOTSUPP;
+    }
+
+    return (ssize_t)len;
+}
+
+ssize_t recv(int sockfd, void *buf, size_t len, int flags)
+{
+    gnuos_socket_entry_t *entry = gnuos_socket_get(sockfd);
+    (void)buf;
+    (void)len;
+    (void)flags;
+
+    if (!entry) {
+        return -GNUOS_SOCKET_ENOTSOCK;
+    }
+    if (!entry->connected) {
+        return -GNUOS_SOCKET_EOPNOTSUPP;
+    }
+
+    return 0;
+}
+
+ssize_t sendto(
+    int sockfd,
+    const void *buf,
+    size_t len,
+    int flags,
+    const struct sockaddr *dest_addr,
+    socklen_t addrlen)
+{
+    (void)dest_addr;
+    (void)addrlen;
+    return send(sockfd, buf, len, flags);
+}
+
+ssize_t recvfrom(
+    int sockfd,
+    void *buf,
+    size_t len,
+    int flags,
+    struct sockaddr *src_addr,
+    socklen_t *addrlen)
+{
+    (void)src_addr;
+    (void)addrlen;
+    return recv(sockfd, buf, len, flags);
+}
+
+int shutdown(int sockfd, int how)
+{
+    gnuos_socket_entry_t *entry = gnuos_socket_get(sockfd);
+
+    if (!entry) {
+        return -GNUOS_SOCKET_ENOTSOCK;
+    }
+    if (how < SHUT_RD || how > SHUT_RDWR) {
+        return -GNUOS_PTHREAD_EINVAL;
+    }
+
+    entry->shutdown_how = how;
+    return 0;
+}
+
 static int gnuos_signal_valid(int signo)
 {
     return signo > 0 && signo < GNUOS_SIGNAL_NSIG;
@@ -699,6 +957,26 @@ static int ldso_stage0_register_builtin_symbols(void)
     g_ldso_stage0_builtin_symbols[35].address = (uint64_t)(uintptr_t)raise;
     g_ldso_stage0_builtin_symbols[36].name = "signal";
     g_ldso_stage0_builtin_symbols[36].address = (uint64_t)(uintptr_t)signal;
+    g_ldso_stage0_builtin_symbols[37].name = "socket";
+    g_ldso_stage0_builtin_symbols[37].address = (uint64_t)(uintptr_t)socket;
+    g_ldso_stage0_builtin_symbols[38].name = "bind";
+    g_ldso_stage0_builtin_symbols[38].address = (uint64_t)(uintptr_t)bind;
+    g_ldso_stage0_builtin_symbols[39].name = "listen";
+    g_ldso_stage0_builtin_symbols[39].address = (uint64_t)(uintptr_t)listen;
+    g_ldso_stage0_builtin_symbols[40].name = "accept";
+    g_ldso_stage0_builtin_symbols[40].address = (uint64_t)(uintptr_t)accept;
+    g_ldso_stage0_builtin_symbols[41].name = "connect";
+    g_ldso_stage0_builtin_symbols[41].address = (uint64_t)(uintptr_t)connect;
+    g_ldso_stage0_builtin_symbols[42].name = "send";
+    g_ldso_stage0_builtin_symbols[42].address = (uint64_t)(uintptr_t)send;
+    g_ldso_stage0_builtin_symbols[43].name = "recv";
+    g_ldso_stage0_builtin_symbols[43].address = (uint64_t)(uintptr_t)recv;
+    g_ldso_stage0_builtin_symbols[44].name = "sendto";
+    g_ldso_stage0_builtin_symbols[44].address = (uint64_t)(uintptr_t)sendto;
+    g_ldso_stage0_builtin_symbols[45].name = "recvfrom";
+    g_ldso_stage0_builtin_symbols[45].address = (uint64_t)(uintptr_t)recvfrom;
+    g_ldso_stage0_builtin_symbols[46].name = "shutdown";
+    g_ldso_stage0_builtin_symbols[46].address = (uint64_t)(uintptr_t)shutdown;
 
     registered_primary = ldso_dlfcn_register_builtin_object(
         "stage0-builtins",
