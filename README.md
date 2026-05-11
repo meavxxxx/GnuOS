@@ -122,10 +122,10 @@
 
 #### 0.4 Документация
 
-- [ ] Архитектурный документ (Architecture Decision Records — ADR)
+- [x] Архитектурный документ (Architecture Decision Records — ADR)
 - [x] Стандарты кодирования (GNU Coding Standards + расширения)
 - [x] Шаблоны issues и pull requests
-- [ ] Wiki с глоссарием и FAQ
+- [x] Wiki с глоссарием и FAQ
 
 ---
 
