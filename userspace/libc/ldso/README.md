@@ -42,6 +42,8 @@ Current status:
 - `libc.so.6` and stage-0 resolver expose file I/O scaffolding APIs:
   `open`, `close`, `read`, `write`, `lseek`, `fstat`, `stat`, `access`,
   `chmod`, `fchmod`, `mkdir`, `umask`.
+- `libc.so.6` and stage-0 resolver expose memory-mapping scaffolding APIs:
+  `mmap`, `munmap`, `mprotect`.
 - The sysroot installer places:
   - loader at `/lib/ld-gnuos.so.1`
   - stub libc at `/usr/lib/libc.so.6` (and `/usr/lib/libc.so` for link-time lookup)

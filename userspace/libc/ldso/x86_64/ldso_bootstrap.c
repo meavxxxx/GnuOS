@@ -9,6 +9,7 @@
 #include <pthread.h>
 #include <semaphore.h>
 #include <signal.h>
+#include <sys/mman.h>
 #include <sys/stat.h>
 #include <sys/socket.h>
 #include <unistd.h>
@@ -28,7 +29,7 @@
 #define LDSO_LD_PRELOAD_KEY "LD_PRELOAD="
 #define LDSO_LD_PRELOAD_KEY_LEN 11U
 #define LDSO_PRELOAD_TOKEN_MAX 128U
-#define LDSO_STAGE0_BUILTIN_SYMBOL_COUNT 65U
+#define LDSO_STAGE0_BUILTIN_SYMBOL_COUNT 68U
 
 #define GNUOS_PTHREAD_ENOSYS 38
 #define GNUOS_PTHREAD_EINVAL 22
@@ -51,6 +52,7 @@
 #define GNUOS_FILE_ENFILE 23
 #define GNUOS_FILE_FD_BASE 64
 #define GNUOS_FILE_MAX 64
+#define GNUOS_MMAN_POOL_SIZE (2UL * 1024UL * 1024UL)
 
 typedef struct {
     uint64_t a_type;
@@ -108,6 +110,8 @@ typedef struct {
 } gnuos_file_entry_t;
 static gnuos_file_entry_t g_file_table[GNUOS_FILE_MAX];
 static mode_t g_file_umask = 0;
+static unsigned char g_mmap_pool[GNUOS_MMAN_POOL_SIZE];
+static size_t g_mmap_pool_next = 0;
 
 static const uint64_t *ldso_stack_skip_argv(const uint64_t *cursor, uint64_t argc)
 {
@@ -918,6 +922,59 @@ mode_t umask(mode_t mask)
     return old;
 }
 
+static size_t gnuos_align_up(size_t value, size_t alignment)
+{
+    size_t mask = alignment - 1U;
+    return (value + mask) & ~mask;
+}
+
+void *mmap(void *addr, size_t length, int prot, int flags, int fd, off_t offset)
+{
+    size_t aligned_length;
+    size_t next;
+    void *mapped;
+
+    (void)prot;
+    (void)fd;
+    (void)offset;
+
+    if (length == 0U) {
+        return MAP_FAILED;
+    }
+    if ((flags & MAP_FIXED) != 0 && addr) {
+        return addr;
+    }
+
+    aligned_length = gnuos_align_up(length, 4096U);
+    next = g_mmap_pool_next;
+    if (next > GNUOS_MMAN_POOL_SIZE || aligned_length > (GNUOS_MMAN_POOL_SIZE - next)) {
+        return MAP_FAILED;
+    }
+
+    mapped = (void *)&g_mmap_pool[next];
+    g_mmap_pool_next = next + aligned_length;
+    return mapped;
+}
+
+int munmap(void *addr, size_t length)
+{
+    if (!addr || length == 0U) {
+        return -GNUOS_PTHREAD_EINVAL;
+    }
+
+    return 0;
+}
+
+int mprotect(void *addr, size_t len, int prot)
+{
+    (void)prot;
+    if (!addr || len == 0U) {
+        return -GNUOS_PTHREAD_EINVAL;
+    }
+
+    return 0;
+}
+
 static int gnuos_signal_valid(int signo)
 {
     return signo > 0 && signo < GNUOS_SIGNAL_NSIG;
@@ -1275,6 +1332,12 @@ static int ldso_stage0_register_builtin_symbols(void)
     g_ldso_stage0_builtin_symbols[63].address = (uint64_t)(uintptr_t)fchmod;
     g_ldso_stage0_builtin_symbols[64].name = "umask";
     g_ldso_stage0_builtin_symbols[64].address = (uint64_t)(uintptr_t)umask;
+    g_ldso_stage0_builtin_symbols[65].name = "mmap";
+    g_ldso_stage0_builtin_symbols[65].address = (uint64_t)(uintptr_t)mmap;
+    g_ldso_stage0_builtin_symbols[66].name = "munmap";
+    g_ldso_stage0_builtin_symbols[66].address = (uint64_t)(uintptr_t)munmap;
+    g_ldso_stage0_builtin_symbols[67].name = "mprotect";
+    g_ldso_stage0_builtin_symbols[67].address = (uint64_t)(uintptr_t)mprotect;
 
     registered_primary = ldso_dlfcn_register_builtin_object(
         "stage0-builtins",

@@ -249,6 +249,7 @@
 - [x] Минимальный signal ABI scaffolding (`<signal.h>`, `sig*`/`kill`/`raise` stubs)
 - [x] Минимальный socket ABI scaffolding (`<sys/socket.h>`, `<netinet/in.h>`, `<arpa/inet.h>`)
 - [x] Минимальный file I/O ABI scaffolding (`<fcntl.h>`, `<sys/stat.h>`, `read`/`write`/...)
+- [x] Минимальный memory-mapping ABI scaffolding (`<sys/mman.h>`, `mmap`/`munmap`/`mprotect`)
 - [x] Поддержка TLS (Thread-Local Storage, `%fs` base)
 - [x] Реализация `dl_iterate_phdr`, `backtrace()`
 
@@ -275,6 +276,7 @@
 - [ ] `<sys/socket.h>`, `<netinet/in.h>`, `<arpa/inet.h>`
 - [x] Минимальный сетевой ABI scaffolding (`socket`/`bind`/`connect` + `hton*`/`inet_*`)
 - [x] Минимальный файловый ABI scaffolding (`<fcntl.h>`, `<sys/stat.h>`, `<unistd.h>`)
+- [x] Минимальный `mmap` ABI scaffolding (`<sys/mman.h>`, `mmap`/`munmap`/`mprotect`)
 - [ ] Тест-сьют POSIX Conformance (POSIX Test Suite / LTP)
 
 ---
