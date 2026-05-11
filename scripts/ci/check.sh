@@ -13,3 +13,7 @@ fi
 if [[ "${RUN_COVERAGE:-0}" == "1" ]]; then
     bash scripts/ci/coverage.sh
 fi
+
+if [[ "${RUN_FUZZ_SMOKE:-0}" == "1" ]]; then
+    bash scripts/ci/fuzz.sh
+fi

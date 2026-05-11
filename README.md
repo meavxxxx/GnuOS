@@ -117,7 +117,7 @@
 - [x] Статический анализатор (cppcheck, clang-tidy)
 - [x] Форматтер кода (`clang-format`, `.editorconfig`)
 - [x] Покрытие кода (gcov / lcov)
-- [ ] Fuzzing-инфраструктура (AFL++, libFuzzer)
+- [x] Fuzzing-инфраструктура (AFL++, libFuzzer)
 - [x] Политика review: минимум 2 approve перед merge
 
 #### 0.4 Документация

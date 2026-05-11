@@ -48,3 +48,14 @@ jobs:
         with:
           name: coverage-lcov
           path: build/coverage/coverage.filtered.info
+
+  fuzz-smoke:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install fuzz deps
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y clang
+      - name: Run libFuzzer smoke session
+        run: bash scripts/ci/fuzz.sh
