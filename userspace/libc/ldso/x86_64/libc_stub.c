@@ -15,7 +15,10 @@ static unsigned long g_tls_bootstrap_area[64];
 static unsigned long g_tls_base_addr;
 
 #define GNUOS_PTHREAD_ENOSYS 38
+#define GNUOS_PTHREAD_EINVAL 22
 #define GNUOS_PTHREAD_MAIN_THREAD ((pthread_t)1UL)
+#define GNUOS_PTHREAD_STACK_MIN 16384UL
+#define GNUOS_PTHREAD_STACK_DEFAULT (2UL * 1024UL * 1024UL)
 
 void gnuos_libc_stub_touch(void)
 {
@@ -226,6 +229,48 @@ int pthread_detach(pthread_t thread)
 {
     (void)thread;
     return GNUOS_PTHREAD_ENOSYS;
+}
+
+int pthread_attr_init(pthread_attr_t *attr)
+{
+    if (!attr) {
+        return GNUOS_PTHREAD_EINVAL;
+    }
+
+    attr->__opaque = 0UL;
+    attr->__stack_size = GNUOS_PTHREAD_STACK_DEFAULT;
+    return 0;
+}
+
+int pthread_attr_destroy(pthread_attr_t *attr)
+{
+    if (!attr) {
+        return GNUOS_PTHREAD_EINVAL;
+    }
+
+    attr->__opaque = 0UL;
+    attr->__stack_size = 0UL;
+    return 0;
+}
+
+int pthread_attr_setstacksize(pthread_attr_t *attr, size_t stacksize)
+{
+    if (!attr || stacksize < GNUOS_PTHREAD_STACK_MIN) {
+        return GNUOS_PTHREAD_EINVAL;
+    }
+
+    attr->__stack_size = stacksize;
+    return 0;
+}
+
+int pthread_attr_getstacksize(const pthread_attr_t *attr, size_t *stacksize)
+{
+    if (!attr || !stacksize) {
+        return GNUOS_PTHREAD_EINVAL;
+    }
+
+    *stacksize = attr->__stack_size;
+    return 0;
 }
 
 __attribute__((noreturn)) void _exit(int status)

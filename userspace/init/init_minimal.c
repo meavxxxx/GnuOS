@@ -39,6 +39,8 @@ int main(int argc, char **argv, char **envp)
     void *tls_base;
     pthread_t thread;
     void *thread_result = 0;
+    pthread_attr_t attr;
+    size_t stack_size = 0;
 
     gnuos_libc_stub_touch();
     tls_base = __gnuos_get_tls_base();
@@ -48,11 +50,16 @@ int main(int argc, char **argv, char **envp)
     (void)__tls_get_addr(&tls_index);
     (void)backtrace(frames, 8);
     (void)dl_iterate_phdr(gnuos_dl_phdr_cb, 0);
+    (void)pthread_attr_init(&attr);
+    (void)pthread_attr_setstacksize(&attr, 1UL << 20);
+    (void)pthread_attr_getstacksize(&attr, &stack_size);
+    (void)stack_size;
     (void)pthread_self();
     (void)pthread_equal(pthread_self(), pthread_self());
-    (void)pthread_create(&thread, 0, gnuos_pthread_noop, 0);
+    (void)pthread_create(&thread, &attr, gnuos_pthread_noop, 0);
     (void)pthread_join(thread, &thread_result);
     (void)pthread_detach(thread);
+    (void)pthread_attr_destroy(&attr);
 #endif
     return 0;
 }

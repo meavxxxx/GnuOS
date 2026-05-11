@@ -26,7 +26,9 @@ Current status:
 - `libc.so.6` and stage-0 resolver expose TLS scaffolding APIs:
   `__gnuos_set_tls_base`, `__gnuos_get_tls_base`, `__tls_get_addr`.
 - `libc.so.6` and stage-0 resolver now expose pthread scaffolding APIs:
-  `pthread_create`, `pthread_self`, `pthread_equal`, `pthread_join`, `pthread_detach`
+  `pthread_create`, `pthread_self`, `pthread_equal`, `pthread_join`, `pthread_detach`,
+  `pthread_attr_init`, `pthread_attr_destroy`, `pthread_attr_setstacksize`,
+  `pthread_attr_getstacksize`
   (currently ENOSYS-style stubs, not `clone()`-backed threading yet).
 - The sysroot installer places:
   - loader at `/lib/ld-gnuos.so.1`

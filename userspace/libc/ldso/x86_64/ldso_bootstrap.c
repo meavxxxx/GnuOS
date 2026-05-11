@@ -20,10 +20,13 @@
 #define LDSO_LD_PRELOAD_KEY "LD_PRELOAD="
 #define LDSO_LD_PRELOAD_KEY_LEN 11U
 #define LDSO_PRELOAD_TOKEN_MAX 128U
-#define LDSO_STAGE0_BUILTIN_SYMBOL_COUNT 17U
+#define LDSO_STAGE0_BUILTIN_SYMBOL_COUNT 21U
 
 #define GNUOS_PTHREAD_ENOSYS 38
+#define GNUOS_PTHREAD_EINVAL 22
 #define GNUOS_PTHREAD_MAIN_THREAD ((pthread_t)1UL)
+#define GNUOS_PTHREAD_STACK_MIN 16384UL
+#define GNUOS_PTHREAD_STACK_DEFAULT (2UL * 1024UL * 1024UL)
 
 typedef struct {
     uint64_t a_type;
@@ -281,6 +284,48 @@ int pthread_detach(pthread_t thread)
     return GNUOS_PTHREAD_ENOSYS;
 }
 
+int pthread_attr_init(pthread_attr_t *attr)
+{
+    if (!attr) {
+        return GNUOS_PTHREAD_EINVAL;
+    }
+
+    attr->__opaque = 0UL;
+    attr->__stack_size = GNUOS_PTHREAD_STACK_DEFAULT;
+    return 0;
+}
+
+int pthread_attr_destroy(pthread_attr_t *attr)
+{
+    if (!attr) {
+        return GNUOS_PTHREAD_EINVAL;
+    }
+
+    attr->__opaque = 0UL;
+    attr->__stack_size = 0UL;
+    return 0;
+}
+
+int pthread_attr_setstacksize(pthread_attr_t *attr, size_t stacksize)
+{
+    if (!attr || stacksize < GNUOS_PTHREAD_STACK_MIN) {
+        return GNUOS_PTHREAD_EINVAL;
+    }
+
+    attr->__stack_size = stacksize;
+    return 0;
+}
+
+int pthread_attr_getstacksize(const pthread_attr_t *attr, size_t *stacksize)
+{
+    if (!attr || !stacksize) {
+        return GNUOS_PTHREAD_EINVAL;
+    }
+
+    *stacksize = attr->__stack_size;
+    return 0;
+}
+
 void __gnuos_store_startup(unsigned long argc, char **argv, char **envp)
 {
     (void)argc;
@@ -408,6 +453,14 @@ static int ldso_stage0_register_builtin_symbols(void)
     g_ldso_stage0_builtin_symbols[15].address = (uint64_t)(uintptr_t)pthread_join;
     g_ldso_stage0_builtin_symbols[16].name = "pthread_detach";
     g_ldso_stage0_builtin_symbols[16].address = (uint64_t)(uintptr_t)pthread_detach;
+    g_ldso_stage0_builtin_symbols[17].name = "pthread_attr_init";
+    g_ldso_stage0_builtin_symbols[17].address = (uint64_t)(uintptr_t)pthread_attr_init;
+    g_ldso_stage0_builtin_symbols[18].name = "pthread_attr_destroy";
+    g_ldso_stage0_builtin_symbols[18].address = (uint64_t)(uintptr_t)pthread_attr_destroy;
+    g_ldso_stage0_builtin_symbols[19].name = "pthread_attr_setstacksize";
+    g_ldso_stage0_builtin_symbols[19].address = (uint64_t)(uintptr_t)pthread_attr_setstacksize;
+    g_ldso_stage0_builtin_symbols[20].name = "pthread_attr_getstacksize";
+    g_ldso_stage0_builtin_symbols[20].address = (uint64_t)(uintptr_t)pthread_attr_getstacksize;
 
     registered_primary = ldso_dlfcn_register_builtin_object(
         "stage0-builtins",
