@@ -82,6 +82,8 @@ typedef struct {
 typedef struct {
     const ldso_elf_dyn_t *dynamic_entries;
     uint64_t dynamic_count;
+    const uint32_t *hash_table;
+    uint64_t hash_nchain;
     const char *strtab;
     uint64_t strsz;
     const ldso_elf_sym_t *symtab;

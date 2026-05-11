@@ -22,6 +22,8 @@ static void ldso_elf_dynamic_reset(ldso_elf_dynamic_info_t *dynamic_info)
 
     dynamic_info->dynamic_entries = 0;
     dynamic_info->dynamic_count = 0U;
+    dynamic_info->hash_table = 0;
+    dynamic_info->hash_nchain = 0U;
     dynamic_info->strtab = 0;
     dynamic_info->strsz = 0U;
     dynamic_info->symtab = 0;
@@ -214,6 +216,8 @@ int ldso_elf_parse_dynamic(
 
         if ((uint64_t)entry->d_tag == LDSO_DT_STRTAB) {
             dynamic_info->strtab = (const char *)(uintptr_t)(load_bias + entry->d_un);
+        } else if ((uint64_t)entry->d_tag == LDSO_DT_HASH) {
+            dynamic_info->hash_table = (const uint32_t *)(uintptr_t)(load_bias + entry->d_un);
         } else if ((uint64_t)entry->d_tag == LDSO_DT_STRSZ) {
             dynamic_info->strsz = entry->d_un;
         } else if ((uint64_t)entry->d_tag == LDSO_DT_SYMTAB) {
@@ -243,6 +247,10 @@ int ldso_elf_parse_dynamic(
 
     if (!dynamic_info->symtab || !dynamic_info->strtab || dynamic_info->syment != sizeof(ldso_elf_sym_t)) {
         return -1;
+    }
+
+    if (dynamic_info->hash_table) {
+        dynamic_info->hash_nchain = dynamic_info->hash_table[1];
     }
 
     if (dynamic_info->rela && dynamic_info->rela_ent == sizeof(ldso_elf_rela_t)) {

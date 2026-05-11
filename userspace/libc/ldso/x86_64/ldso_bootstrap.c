@@ -1,5 +1,6 @@
 #include <stdint.h>
 
+#include "ldso_dlfcn.h"
 #include "ldso_elf.h"
 
 #define LDSO_AUXV_SCAN_LIMIT 256U
@@ -35,9 +36,12 @@ typedef struct {
     uint64_t relocations_unsupported;
     uint64_t init_sequence_attempted;
     uint64_t init_sequence_completed;
+    uint64_t dlfcn_ready;
+    uint64_t builtin_object_registered;
 } ldso_stage0_state_t;
 
 volatile ldso_stage0_state_t g_ldso_stage0_state;
+static ldso_dlfcn_builtin_symbol_t g_ldso_stage0_builtin_symbols[6];
 
 static const uint64_t *ldso_stack_skip_argv(const uint64_t *cursor, uint64_t argc)
 {
@@ -125,23 +129,6 @@ static uint64_t ldso_auxv_lookup(const ldso_auxv_entry_t *auxv, uint64_t key)
     return 0U;
 }
 
-static int ldso_str_equal(const char *lhs, const char *rhs)
-{
-    if (!lhs || !rhs) {
-        return 0;
-    }
-
-    while (*lhs && *rhs) {
-        if (*lhs != *rhs) {
-            return 0;
-        }
-        lhs++;
-        rhs++;
-    }
-
-    return *lhs == '\0' && *rhs == '\0';
-}
-
 static void ldso_builtin_touch(void)
 {
 }
@@ -155,23 +142,42 @@ static __attribute__((noreturn)) void ldso_builtin_exit(void)
 
 static int ldso_stage0_resolve_symbol(const char *name, uint64_t *address, void *context)
 {
+    void *resolved = 0;
+
     (void)context;
 
     if (!name || !address) {
         return 0;
     }
 
-    if (ldso_str_equal(name, "gnuos_libc_stub_touch")) {
-        *address = (uint64_t)(uintptr_t)ldso_builtin_touch;
-        return 1;
+    resolved = ldso_dlfcn_resolve_global(name);
+    if (!resolved) {
+        return 0;
     }
 
-    if (ldso_str_equal(name, "_exit")) {
-        *address = (uint64_t)(uintptr_t)ldso_builtin_exit;
-        return 1;
-    }
+    *address = (uint64_t)(uintptr_t)resolved;
+    return 1;
+}
 
-    return 0;
+static int ldso_stage0_register_builtin_symbols(void)
+{
+    g_ldso_stage0_builtin_symbols[0].name = "gnuos_libc_stub_touch";
+    g_ldso_stage0_builtin_symbols[0].address = (uint64_t)(uintptr_t)ldso_builtin_touch;
+    g_ldso_stage0_builtin_symbols[1].name = "_exit";
+    g_ldso_stage0_builtin_symbols[1].address = (uint64_t)(uintptr_t)ldso_builtin_exit;
+    g_ldso_stage0_builtin_symbols[2].name = "dlopen";
+    g_ldso_stage0_builtin_symbols[2].address = (uint64_t)(uintptr_t)ldso_dlopen;
+    g_ldso_stage0_builtin_symbols[3].name = "dlsym";
+    g_ldso_stage0_builtin_symbols[3].address = (uint64_t)(uintptr_t)ldso_dlsym;
+    g_ldso_stage0_builtin_symbols[4].name = "dlclose";
+    g_ldso_stage0_builtin_symbols[4].address = (uint64_t)(uintptr_t)ldso_dlclose;
+    g_ldso_stage0_builtin_symbols[5].name = "dlerror";
+    g_ldso_stage0_builtin_symbols[5].address = (uint64_t)(uintptr_t)ldso_dlerror;
+
+    return ldso_dlfcn_register_builtin_object(
+        "stage0-builtins",
+        g_ldso_stage0_builtin_symbols,
+        6U);
 }
 
 static uint64_t ldso_compute_load_bias(const ldso_elf_layout_t *layout, uint64_t at_phdr)
@@ -206,6 +212,8 @@ static void ldso_stage0_state_reset(void)
     g_ldso_stage0_state.relocations_unsupported = 0U;
     g_ldso_stage0_state.init_sequence_attempted = 0U;
     g_ldso_stage0_state.init_sequence_completed = 0U;
+    g_ldso_stage0_state.dlfcn_ready = 0U;
+    g_ldso_stage0_state.builtin_object_registered = 0U;
 }
 
 void ldso_stage0_bootstrap(const uint64_t *initial_stack)
@@ -250,6 +258,12 @@ void ldso_stage0_bootstrap(const uint64_t *initial_stack)
     g_ldso_stage0_state.has_gnu_relro = layout.relro_segment != 0;
 
     if (ldso_elf_parse_dynamic(&layout, load_bias, &dynamic_info) == 0) {
+        ldso_dlfcn_init(&dynamic_info, load_bias);
+        g_ldso_stage0_state.dlfcn_ready = 1U;
+        if (ldso_stage0_register_builtin_symbols() == 0) {
+            g_ldso_stage0_state.builtin_object_registered = 1U;
+        }
+
         g_ldso_stage0_state.dynamic_ready = 1U;
         g_ldso_stage0_state.relocations_attempted = 1U;
 

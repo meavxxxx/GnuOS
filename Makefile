@@ -38,6 +38,7 @@ USER_LDSO_DIR := userspace/libc/ldso/$(ARCH)
 USER_LDSO_ASM_SOURCE := $(USER_LDSO_DIR)/ldso_start.S
 USER_LDSO_ASM_OBJECT := $(BUILD_DIR)/$(USER_LDSO_ASM_SOURCE:.S=.o)
 USER_LDSO_C_SOURCES := \
+	userspace/libc/ldso/ldso_dlfcn.c \
 	userspace/libc/ldso/ldso_elf.c \
 	$(USER_LDSO_DIR)/ldso_bootstrap.c
 USER_LDSO_C_OBJECTS := \

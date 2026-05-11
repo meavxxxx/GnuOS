@@ -6,9 +6,11 @@ This directory hosts early dynamic-linker scaffolding for userspace ABI bring-up
 - `ldso_elf.c` + `ldso_elf.h` classify `PT_LOAD`, `PT_DYNAMIC`, `PT_GNU_RELRO`,
   parse `PT_DYNAMIC`, apply `RELA` relocations for `R_X86_64_*`, and run
   `DT_INIT`/`DT_INIT_ARRAY` initialization sequence.
+- `ldso_dlfcn.c` + `ldso_dlfcn.h` provide stage-0 `dlopen`/`dlsym`/`dlclose`/`dlerror`
+  with pre-registered object registry support.
 - `x86_64/ldso_bootstrap.c` parses auxv (`AT_PHDR/AT_PHENT/AT_PHNUM`) and records
   stage-0 program-header layout metadata, computes load bias, and runs relocation pass.
-  Current symbol resolver is a bootstrap stub for smoke symbols only.
+  Symbol resolver now uses the stage-0 object registry and built-in symbol table.
 - `x86_64/libc_stub.c` provides a minimal shared `libc.so.6` stub used by smoke tests.
 
 Current status:
@@ -16,6 +18,7 @@ Current status:
 - `make userspace` builds `ld-gnuos.so.1` and a smoke executable with
   `PT_INTERP=/lib/ld-gnuos.so.1`.
 - Dynamic smoke executable includes both `DT_INIT` and `DT_INIT_ARRAY`.
+- `userspace/libc/include/dlfcn.h` is present for userspace ABI scaffolding.
 - The sysroot installer places:
   - loader at `/lib/ld-gnuos.so.1`
   - stub libc at `/usr/lib/libc.so.6` (and `/usr/lib/libc.so` for link-time lookup)

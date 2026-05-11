@@ -252,7 +252,7 @@
 - [x] ELF загрузчик (парсинг PT_LOAD, PT_DYNAMIC, PT_GNU_RELRO)
 - [x] Разрешение символов (PLT / GOT)
 - [x] Порядок инициализации: `.init_array`, `DT_INIT`
-- [ ] `dlopen()` / `dlsym()` / `dlclose()`
+- [x] `dlopen()` / `dlsym()` / `dlclose()`
 - [ ] LD_PRELOAD механизм
 - [ ] ASLR для shared libraries
 
