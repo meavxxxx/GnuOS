@@ -9,6 +9,11 @@ Thanks for helping build GNU OS.
 3. Run local checks before opening a merge request.
 4. Open MR with a clear summary, risk notes, and test evidence.
 
+## Branching policy
+
+Branching and merge rules are defined in
+[`docs/process/branching-policy.md`](docs/process/branching-policy.md).
+
 ## Pull request requirements
 
 - CI must pass.
