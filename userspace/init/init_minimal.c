@@ -2,6 +2,11 @@
 
 #ifdef GNUOS_DYNAMIC_SMOKE
 extern void gnuos_libc_stub_touch(void);
+
+__attribute__((constructor)) static void gnuos_dynamic_ctor(void)
+{
+    gnuos_libc_stub_touch();
+}
 #endif
 
 int main(int argc, char **argv, char **envp)

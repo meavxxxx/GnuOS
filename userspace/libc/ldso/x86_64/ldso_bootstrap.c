@@ -33,6 +33,8 @@ typedef struct {
     uint64_t relocations_applied;
     uint64_t relocations_unresolved;
     uint64_t relocations_unsupported;
+    uint64_t init_sequence_attempted;
+    uint64_t init_sequence_completed;
 } ldso_stage0_state_t;
 
 volatile ldso_stage0_state_t g_ldso_stage0_state;
@@ -202,6 +204,8 @@ static void ldso_stage0_state_reset(void)
     g_ldso_stage0_state.relocations_applied = 0U;
     g_ldso_stage0_state.relocations_unresolved = 0U;
     g_ldso_stage0_state.relocations_unsupported = 0U;
+    g_ldso_stage0_state.init_sequence_attempted = 0U;
+    g_ldso_stage0_state.init_sequence_completed = 0U;
 }
 
 void ldso_stage0_bootstrap(const uint64_t *initial_stack)
@@ -258,6 +262,11 @@ void ldso_stage0_bootstrap(const uint64_t *initial_stack)
             g_ldso_stage0_state.relocations_applied = reloc_result.applied_count;
             g_ldso_stage0_state.relocations_unresolved = reloc_result.unresolved_count;
             g_ldso_stage0_state.relocations_unsupported = reloc_result.unsupported_count;
+
+            g_ldso_stage0_state.init_sequence_attempted = 1U;
+            if (ldso_elf_run_init_sequence(&dynamic_info) == 0) {
+                g_ldso_stage0_state.init_sequence_completed = 1U;
+            }
         }
     }
 

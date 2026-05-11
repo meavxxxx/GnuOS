@@ -32,6 +32,9 @@ static void ldso_elf_dynamic_reset(ldso_elf_dynamic_info_t *dynamic_info)
     dynamic_info->jmprel = 0;
     dynamic_info->jmprel_count = 0U;
     dynamic_info->pltrel_type = 0U;
+    dynamic_info->init_func = 0U;
+    dynamic_info->init_array = 0;
+    dynamic_info->init_array_count = 0U;
 }
 
 static void ldso_elf_reloc_result_reset(ldso_elf_reloc_result_t *result)
@@ -190,6 +193,7 @@ int ldso_elf_parse_dynamic(
     const ldso_elf_dyn_t *dyn_entries;
     uint64_t rela_size = 0U;
     uint64_t pltrel_size = 0U;
+    uint64_t init_array_size = 0U;
 
     if (!layout || !dynamic_info || !layout->dynamic_segment || layout->dynamic_segment->p_filesz == 0U) {
         return -1;
@@ -228,6 +232,12 @@ int ldso_elf_parse_dynamic(
             pltrel_size = entry->d_un;
         } else if ((uint64_t)entry->d_tag == LDSO_DT_PLTREL) {
             dynamic_info->pltrel_type = entry->d_un;
+        } else if ((uint64_t)entry->d_tag == LDSO_DT_INIT) {
+            dynamic_info->init_func = load_bias + entry->d_un;
+        } else if ((uint64_t)entry->d_tag == LDSO_DT_INIT_ARRAY) {
+            dynamic_info->init_array = (const uint64_t *)(uintptr_t)(load_bias + entry->d_un);
+        } else if ((uint64_t)entry->d_tag == LDSO_DT_INIT_ARRAYSZ) {
+            init_array_size = entry->d_un;
         }
     }
 
@@ -241,6 +251,39 @@ int ldso_elf_parse_dynamic(
 
     if (dynamic_info->jmprel && dynamic_info->pltrel_type == LDSO_DT_PLTREL_RELA) {
         dynamic_info->jmprel_count = pltrel_size / sizeof(ldso_elf_rela_t);
+    }
+
+    if (dynamic_info->init_array) {
+        dynamic_info->init_array_count = init_array_size / sizeof(uint64_t);
+    }
+
+    return 0;
+}
+
+int ldso_elf_run_init_sequence(const ldso_elf_dynamic_info_t *dynamic_info)
+{
+    uint64_t index;
+
+    if (!dynamic_info) {
+        return -1;
+    }
+
+    if (dynamic_info->init_func != 0U) {
+        void (*init_func)(void) = (void (*)(void))(uintptr_t)dynamic_info->init_func;
+        init_func();
+    }
+
+    if (!dynamic_info->init_array || dynamic_info->init_array_count == 0U) {
+        return 0;
+    }
+
+    for (index = 0U; index < dynamic_info->init_array_count; index++) {
+        uint64_t init_ptr = dynamic_info->init_array[index];
+        if (init_ptr == 0U || init_ptr == UINT64_MAX) {
+            continue;
+        }
+
+        ((void (*)(void))(uintptr_t)init_ptr)();
     }
 
     return 0;

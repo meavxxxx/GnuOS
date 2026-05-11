@@ -40,8 +40,14 @@ typedef struct {
 #define LDSO_DT_RELAENT 9ULL
 #define LDSO_DT_STRSZ 10ULL
 #define LDSO_DT_SYMENT 11ULL
+#define LDSO_DT_INIT 12ULL
+#define LDSO_DT_FINI 13ULL
 #define LDSO_DT_PLTREL 20ULL
 #define LDSO_DT_JMPREL 23ULL
+#define LDSO_DT_INIT_ARRAY 25ULL
+#define LDSO_DT_FINI_ARRAY 26ULL
+#define LDSO_DT_INIT_ARRAYSZ 27ULL
+#define LDSO_DT_FINI_ARRAYSZ 28ULL
 
 #define LDSO_DT_PLTREL_RELA LDSO_DT_RELA
 
@@ -86,6 +92,9 @@ typedef struct {
     const ldso_elf_rela_t *jmprel;
     uint64_t jmprel_count;
     uint64_t pltrel_type;
+    uint64_t init_func;
+    const uint64_t *init_array;
+    uint64_t init_array_count;
 } ldso_elf_dynamic_info_t;
 
 typedef struct {
@@ -121,5 +130,6 @@ int ldso_elf_apply_relocations(
     ldso_symbol_resolver_t resolver,
     void *resolver_context,
     ldso_elf_reloc_result_t *result);
+int ldso_elf_run_init_sequence(const ldso_elf_dynamic_info_t *dynamic_info);
 
 #endif
