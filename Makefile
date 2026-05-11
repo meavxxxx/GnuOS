@@ -26,6 +26,16 @@ BUILD_DIR ?= build/$(ARCH)
 ISO_DIR := $(BUILD_DIR)/iso
 KERNEL_ELF := $(BUILD_DIR)/kernel.elf
 ISO_IMAGE := $(BUILD_DIR)/gnuos-$(ARCH).iso
+USER_STARTFILES_DIR := userspace/libc/startfiles/$(ARCH)
+USER_STARTFILES_SOURCES := \
+	$(USER_STARTFILES_DIR)/crt0.S \
+	$(USER_STARTFILES_DIR)/crti.S \
+	$(USER_STARTFILES_DIR)/crtn.S
+USER_STARTFILES_OBJECTS := \
+	$(patsubst $(USER_STARTFILES_DIR)/%.S,$(BUILD_DIR)/$(USER_STARTFILES_DIR)/%.o,$(USER_STARTFILES_SOURCES))
+USER_SMOKE_SOURCE := userspace/init/init_minimal.c
+USER_SMOKE_OBJECT := $(BUILD_DIR)/$(USER_SMOKE_SOURCE:.c=.o)
+USER_SMOKE_ELF := $(BUILD_DIR)/userspace/init/init_minimal.elf
 
 COMMON_CFLAGS := -std=$(CSTD) -O2 -g -ffreestanding -fno-stack-protector -fno-pie \
 	-mno-red-zone -mgeneral-regs-only -Wall -Wextra -Wpedantic -Iinclude -Ikernel/include
@@ -60,7 +70,7 @@ KERNEL_OBJECTS := \
 	$(patsubst %.S,$(BUILD_DIR)/%.o,$(ARCH_ASM_SOURCES))
 KERNEL_DEPS := $(KERNEL_OBJECTS:.o=.d)
 
-.PHONY: all kernel userspace image iso run run-debug test check-posix docs clean
+.PHONY: all kernel userspace userspace-startfiles userspace-smoke image iso run run-debug test check-posix docs clean
 
 all: kernel
 
@@ -92,8 +102,22 @@ run: $(ISO_IMAGE)
 run-debug: $(ISO_IMAGE)
 	$(QEMU_SYSTEM) -cdrom $(ISO_IMAGE) -serial stdio -s -S
 
-userspace:
-	@echo "Userspace build pipeline is not implemented yet."
+userspace: userspace-smoke
+
+userspace-startfiles: $(USER_STARTFILES_OBJECTS)
+	@echo "GNU OS userspace start files built:"
+	@for obj in $(USER_STARTFILES_OBJECTS); do echo "  $$obj"; done
+
+userspace-smoke: userspace-startfiles $(USER_SMOKE_ELF)
+	@echo "GNU OS userspace smoke ELF: $(USER_SMOKE_ELF)"
+
+$(USER_SMOKE_ELF): $(USER_STARTFILES_OBJECTS) $(USER_SMOKE_OBJECT)
+	@mkdir -p $(dir $@)
+	$(CC) -nostdlib -no-pie -Wl,--build-id=none -o $@ \
+		$(BUILD_DIR)/$(USER_STARTFILES_DIR)/crt0.o \
+		$(BUILD_DIR)/$(USER_STARTFILES_DIR)/crti.o \
+		$(USER_SMOKE_OBJECT) \
+		$(BUILD_DIR)/$(USER_STARTFILES_DIR)/crtn.o
 
 test:
 	@echo "Tests are not wired yet. Add unit/integration targets in tests/."
