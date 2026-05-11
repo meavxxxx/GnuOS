@@ -5,8 +5,10 @@
 #include <gnuos/sched.h>
 #include <gnuos/spinlock.h>
 #include <gnuos/syscall.h>
+#include <gnuos/uaccess.h>
 
 #define SYSCALL_ENOSYS (-38LL)
+#define SYSCALL_EFAULT (-14LL)
 
 static spinlock_t g_syscall_lock;
 static syscall_handler_t g_syscall_table[SYSCALL_MAX_ENTRIES];
@@ -70,6 +72,35 @@ static int64_t sys_sched_yield(
     return 0LL;
 }
 
+static int64_t sys_gettid_user(
+    uint64_t arg0,
+    uint64_t arg1,
+    uint64_t arg2,
+    uint64_t arg3,
+    uint64_t arg4,
+    uint64_t arg5)
+{
+    task_t *current;
+    uint64_t tid = 0U;
+
+    (void)arg1;
+    (void)arg2;
+    (void)arg3;
+    (void)arg4;
+    (void)arg5;
+
+    current = sched_current_task();
+    if (current) {
+        tid = current->tid;
+    }
+
+    if (uaccess_copy_to_user(arg0, &tid, sizeof(tid)) != 0) {
+        return SYSCALL_EFAULT;
+    }
+
+    return 0LL;
+}
+
 void syscall_init(void)
 {
     uint64_t irq_flags;
@@ -88,6 +119,7 @@ void syscall_init(void)
 
     (void)syscall_register(SYS_GETTID, sys_gettid);
     (void)syscall_register(SYS_SCHED_YIELD, sys_sched_yield);
+    (void)syscall_register(SYS_GETTID_USER, sys_gettid_user);
     kprintf(
         "GNU OS: syscall table initialized (registered=%u, max=%u).\n",
         (uint64_t)g_syscall_registered_count,

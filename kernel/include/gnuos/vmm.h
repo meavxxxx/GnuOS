@@ -11,6 +11,7 @@ int vmm_init(void);
 int vmm_map_page(uint64_t virt_addr, uint64_t phys_addr, uint64_t flags);
 int vmm_unmap_page(uint64_t virt_addr);
 int vmm_translate(uint64_t virt_addr, uint64_t *out_phys_addr);
+int vmm_query_mapping(uint64_t virt_addr, uint64_t *out_phys_addr, uint64_t *out_flags);
 void *vmm_alloc_kernel_pages(uint64_t page_count, uint64_t flags);
 
 #endif

@@ -41,6 +41,7 @@ KERNEL_C_SOURCES := \
 	kernel/ipc/ipc.c \
 	kernel/ipc/shm.c \
 	kernel/mm/pmm.c \
+	kernel/mm/uaccess.c \
 	kernel/mm/vmm.c \
 	kernel/sched/sched.c \
 	kernel/sched/workqueue.c \

@@ -51,6 +51,23 @@ static uint64_t *vmm_entry_to_table(uint64_t entry)
     return (uint64_t *)(uintptr_t)(entry & VMM_PHYS_MASK);
 }
 
+static uint64_t vmm_entry_to_map_flags(uint64_t entry)
+{
+    uint64_t flags = 0U;
+
+    if ((entry & VMM_PAGE_WRITABLE) != 0U) {
+        flags |= VMM_MAP_WRITABLE;
+    }
+    if ((entry & VMM_PAGE_USER) != 0U) {
+        flags |= VMM_MAP_USER;
+    }
+    if ((entry & VMM_MAP_NX) != 0U) {
+        flags |= VMM_MAP_NX;
+    }
+
+    return flags;
+}
+
 static void vmm_zero_page(uint64_t *table)
 {
     for (uint16_t i = 0; i < VMM_ENTRIES_PER_TABLE; i++) {
@@ -311,6 +328,54 @@ int vmm_translate(uint64_t virt_addr, uint64_t *out_phys_addr)
     }
 
     *out_phys_addr = (pte & VMM_PHYS_MASK) | (virt_addr & VMM_PAGE_OFFSET_MASK);
+    return 1;
+}
+
+int vmm_query_mapping(uint64_t virt_addr, uint64_t *out_phys_addr, uint64_t *out_flags)
+{
+    if (!g_pml4 || !out_phys_addr || !out_flags) {
+        return 0;
+    }
+
+    uint16_t l4 = vmm_pml4_index(virt_addr);
+    uint64_t pml4e = g_pml4[l4];
+    if ((pml4e & VMM_PAGE_PRESENT) == 0U) {
+        return 0;
+    }
+
+    uint64_t *pdpt = vmm_entry_to_table(pml4e);
+    uint16_t l3 = vmm_pdpt_index(virt_addr);
+    uint64_t pdpte = pdpt[l3];
+    if ((pdpte & VMM_PAGE_PRESENT) == 0U) {
+        return 0;
+    }
+    if ((pdpte & VMM_PAGE_SIZE) != 0U) {
+        *out_phys_addr = (pdpte & VMM_PHYS_MASK) | (virt_addr & ((1ULL << 30U) - 1ULL));
+        *out_flags = vmm_entry_to_map_flags(pdpte);
+        return 1;
+    }
+
+    uint64_t *pd = vmm_entry_to_table(pdpte);
+    uint16_t l2 = vmm_pd_index(virt_addr);
+    uint64_t pde = pd[l2];
+    if ((pde & VMM_PAGE_PRESENT) == 0U) {
+        return 0;
+    }
+    if ((pde & VMM_PAGE_SIZE) != 0U) {
+        *out_phys_addr = (pde & VMM_PHYS_MASK) | (virt_addr & ((1ULL << 21U) - 1ULL));
+        *out_flags = vmm_entry_to_map_flags(pde);
+        return 1;
+    }
+
+    uint64_t *pt = vmm_entry_to_table(pde);
+    uint16_t l1 = vmm_pt_index(virt_addr);
+    uint64_t pte = pt[l1];
+    if ((pte & VMM_PAGE_PRESENT) == 0U) {
+        return 0;
+    }
+
+    *out_phys_addr = (pte & VMM_PHYS_MASK) | (virt_addr & VMM_PAGE_OFFSET_MASK);
+    *out_flags = vmm_entry_to_map_flags(pte);
     return 1;
 }
 

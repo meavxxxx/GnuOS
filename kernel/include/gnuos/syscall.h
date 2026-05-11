@@ -7,6 +7,7 @@
 
 #define SYS_SCHED_YIELD 24U
 #define SYS_GETTID 186U
+#define SYS_GETTID_USER 400U
 
 typedef struct {
     uint64_t number;

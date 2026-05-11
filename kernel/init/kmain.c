@@ -359,7 +359,13 @@ void kmain(uint64_t boot_magic, uint64_t boot_info_addr)
     uint64_t shm_reader_size = 0U;
     int64_t syscall_gettid_result = 0LL;
     int64_t syscall_unknown_result = 0LL;
+    int64_t syscall_userptr_bad_result = 0LL;
+    int64_t syscall_userptr_good_result = -1LL;
+    uint64_t syscall_user_tid_value = 0U;
     uint8_t syscall_fastpath_ready = 0U;
+    uint64_t syscall_user_page_virt = 0x0000000080000000ULL;
+    void *syscall_user_page = NULL;
+    int syscall_user_page_mapped = 0;
     task_t *current_task = NULL;
     task_t *rcu_reader_task = NULL;
     task_t *rcu_updater_task = NULL;
@@ -464,6 +470,47 @@ void kmain(uint64_t boot_magic, uint64_t boot_info_addr)
         syscall_unknown_result,
         (uint64_t)syscall_registered_count(),
         (uint64_t)syscall_fastpath_ready);
+    syscall_userptr_bad_result = syscall_dispatch(
+        SYS_GETTID_USER,
+        (uint64_t)(uintptr_t)&syscall_user_tid_value,
+        0U,
+        0U,
+        0U,
+        0U,
+        0U);
+    syscall_user_page = pmm_alloc_page();
+    if (syscall_user_page) {
+        if (vmm_map_page(
+                syscall_user_page_virt,
+                (uint64_t)(uintptr_t)syscall_user_page,
+                VMM_MAP_USER | VMM_MAP_WRITABLE)) {
+            volatile uint64_t *user_tid_ptr =
+                (volatile uint64_t *)(uintptr_t)syscall_user_page_virt;
+            *user_tid_ptr = UINT64_MAX;
+            syscall_user_page_mapped = 1;
+            syscall_userptr_good_result = syscall_dispatch(
+                SYS_GETTID_USER,
+                syscall_user_page_virt,
+                0U,
+                0U,
+                0U,
+                0U,
+                0U);
+            syscall_user_tid_value = *user_tid_ptr;
+        } else {
+            pmm_free_page(syscall_user_page);
+            syscall_user_page = NULL;
+        }
+    }
+    kprintf(
+        "GNU OS: syscall uaccess demo bad=%d good=%d user_tid=%u\n",
+        syscall_userptr_bad_result,
+        syscall_userptr_good_result,
+        syscall_user_tid_value);
+    if (syscall_user_page_mapped) {
+        (void)vmm_unmap_page(syscall_user_page_virt);
+        pmm_free_page(syscall_user_page);
+    }
 
     ipc_boot_channel = ipc_channel_create("boot-log");
     if (ipc_boot_channel >= 0) {
