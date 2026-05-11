@@ -44,6 +44,8 @@ Current status:
   `chmod`, `fchmod`, `mkdir`, `umask`.
 - `libc.so.6` and stage-0 resolver expose memory-mapping scaffolding APIs:
   `mmap`, `munmap`, `mprotect`.
+- `libc.so.6` and stage-0 resolver expose errno scaffolding API:
+  `__errno_location` (for `errno` macro support).
 - The sysroot installer places:
   - loader at `/lib/ld-gnuos.so.1`
   - stub libc at `/usr/lib/libc.so.6` (and `/usr/lib/libc.so` for link-time lookup)

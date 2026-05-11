@@ -1,4 +1,5 @@
 #include <arpa/inet.h>
+#include <errno.h>
 #include <execinfo.h>
 #include <fcntl.h>
 #include <gnuos/tls.h>
@@ -22,6 +23,7 @@
 static char **g_startup_envp;
 static unsigned long g_tls_bootstrap_area[64];
 static unsigned long g_tls_base_addr;
+static int g_errno_value;
 
 #define GNUOS_PTHREAD_ENOSYS 38
 #define GNUOS_PTHREAD_EINVAL 22
@@ -69,6 +71,11 @@ static gnuos_file_entry_t g_file_table[GNUOS_FILE_MAX];
 static mode_t g_file_umask = 0;
 static unsigned char g_mmap_pool[GNUOS_MMAN_POOL_SIZE];
 static size_t g_mmap_pool_next = 0;
+
+int *__errno_location(void)
+{
+    return &g_errno_value;
+}
 
 void gnuos_libc_stub_touch(void)
 {

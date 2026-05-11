@@ -1,6 +1,7 @@
 #include <stdint.h>
 
 #include <arpa/inet.h>
+#include <errno.h>
 #include <execinfo.h>
 #include <fcntl.h>
 #include <gnuos/tls.h>
@@ -29,7 +30,7 @@
 #define LDSO_LD_PRELOAD_KEY "LD_PRELOAD="
 #define LDSO_LD_PRELOAD_KEY_LEN 11U
 #define LDSO_PRELOAD_TOKEN_MAX 128U
-#define LDSO_STAGE0_BUILTIN_SYMBOL_COUNT 68U
+#define LDSO_STAGE0_BUILTIN_SYMBOL_COUNT 69U
 
 #define GNUOS_PTHREAD_ENOSYS 38
 #define GNUOS_PTHREAD_EINVAL 22
@@ -89,6 +90,7 @@ volatile ldso_stage0_state_t g_ldso_stage0_state;
 static ldso_dlfcn_builtin_symbol_t g_ldso_stage0_builtin_symbols[LDSO_STAGE0_BUILTIN_SYMBOL_COUNT];
 static uintptr_t g_ldso_stage0_tls_storage[64];
 static uintptr_t g_ldso_stage0_tls_base;
+static int g_errno_value;
 static sigset_t g_signal_mask;
 static struct sigaction g_signal_actions[GNUOS_SIGNAL_NSIG];
 typedef struct {
@@ -112,6 +114,11 @@ static gnuos_file_entry_t g_file_table[GNUOS_FILE_MAX];
 static mode_t g_file_umask = 0;
 static unsigned char g_mmap_pool[GNUOS_MMAN_POOL_SIZE];
 static size_t g_mmap_pool_next = 0;
+
+int *__errno_location(void)
+{
+    return &g_errno_value;
+}
 
 static const uint64_t *ldso_stack_skip_argv(const uint64_t *cursor, uint64_t argc)
 {
@@ -1338,6 +1345,8 @@ static int ldso_stage0_register_builtin_symbols(void)
     g_ldso_stage0_builtin_symbols[66].address = (uint64_t)(uintptr_t)munmap;
     g_ldso_stage0_builtin_symbols[67].name = "mprotect";
     g_ldso_stage0_builtin_symbols[67].address = (uint64_t)(uintptr_t)mprotect;
+    g_ldso_stage0_builtin_symbols[68].name = "__errno_location";
+    g_ldso_stage0_builtin_symbols[68].address = (uint64_t)(uintptr_t)__errno_location;
 
     registered_primary = ldso_dlfcn_register_builtin_object(
         "stage0-builtins",

@@ -9,6 +9,7 @@
 #include <semaphore.h>
 #include <signal.h>
 #include <arpa/inet.h>
+#include <errno.h>
 #include <sys/mman.h>
 #include <sys/stat.h>
 #include <sys/socket.h>
@@ -67,6 +68,7 @@ int main(int argc, char **argv, char **envp)
     struct stat file_stat;
     mode_t old_umask = 0;
     void *mapped = MAP_FAILED;
+    int saved_errno = 0;
 
     gnuos_libc_stub_touch();
     tls_base = __gnuos_get_tls_base();
@@ -144,6 +146,9 @@ int main(int argc, char **argv, char **envp)
     }
     (void)stat("./dummy", &file_stat);
     (void)mkdir("./tmp", 0755);
+    errno = 0;
+    saved_errno = errno;
+    (void)saved_errno;
     mapped = mmap(0, 4096, PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
     if (mapped != MAP_FAILED) {
         (void)mprotect(mapped, 4096, PROT_READ);

@@ -250,6 +250,7 @@
 - [x] Минимальный socket ABI scaffolding (`<sys/socket.h>`, `<netinet/in.h>`, `<arpa/inet.h>`)
 - [x] Минимальный file I/O ABI scaffolding (`<fcntl.h>`, `<sys/stat.h>`, `read`/`write`/...)
 - [x] Минимальный memory-mapping ABI scaffolding (`<sys/mman.h>`, `mmap`/`munmap`/`mprotect`)
+- [x] Минимальный errno ABI scaffolding (`<errno.h>`, `__errno_location`)
 - [x] Поддержка TLS (Thread-Local Storage, `%fs` base)
 - [x] Реализация `dl_iterate_phdr`, `backtrace()`
 
