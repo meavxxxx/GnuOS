@@ -9,7 +9,8 @@ This directory hosts early dynamic-linker scaffolding for userspace ABI bring-up
 - `ldso_dlfcn.c` + `ldso_dlfcn.h` provide stage-0 `dlopen`/`dlsym`/`dlclose`/`dlerror`
   with pre-registered object registry support.
 - `x86_64/ldso_bootstrap.c` parses auxv (`AT_PHDR/AT_PHENT/AT_PHNUM`) and records
-  stage-0 program-header layout metadata, computes load bias, and runs relocation pass.
+  stage-0 program-header layout metadata, computes load bias, runs relocation pass,
+  and applies `LD_PRELOAD` entries from env for pre-registered objects.
   Symbol resolver now uses the stage-0 object registry and built-in symbol table.
 - `x86_64/libc_stub.c` provides a minimal shared `libc.so.6` stub used by smoke tests.
 
@@ -19,6 +20,7 @@ Current status:
   `PT_INTERP=/lib/ld-gnuos.so.1`.
 - Dynamic smoke executable includes both `DT_INIT` and `DT_INIT_ARRAY`.
 - `userspace/libc/include/dlfcn.h` is present for userspace ABI scaffolding.
+- `LD_PRELOAD` stage-0 support currently resolves pre-registered object names only.
 - The sysroot installer places:
   - loader at `/lib/ld-gnuos.so.1`
   - stub libc at `/usr/lib/libc.so.6` (and `/usr/lib/libc.so` for link-time lookup)

@@ -253,7 +253,7 @@
 - [x] Разрешение символов (PLT / GOT)
 - [x] Порядок инициализации: `.init_array`, `DT_INIT`
 - [x] `dlopen()` / `dlsym()` / `dlclose()`
-- [ ] LD_PRELOAD механизм
+- [x] LD_PRELOAD механизм
 - [ ] ASLR для shared libraries
 
 #### 2.4 Системная математическая библиотека

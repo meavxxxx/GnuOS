@@ -12,6 +12,9 @@
 #define LDSO_AT_PHNUM 5U
 #define LDSO_AT_BASE 7U
 #define LDSO_AT_ENTRY 9U
+#define LDSO_LD_PRELOAD_KEY "LD_PRELOAD="
+#define LDSO_LD_PRELOAD_KEY_LEN 11U
+#define LDSO_PRELOAD_TOKEN_MAX 128U
 
 typedef struct {
     uint64_t a_type;
@@ -38,6 +41,10 @@ typedef struct {
     uint64_t init_sequence_completed;
     uint64_t dlfcn_ready;
     uint64_t builtin_object_registered;
+    uint64_t ld_preload_seen;
+    uint64_t ld_preload_attempted;
+    uint64_t ld_preload_loaded;
+    uint64_t ld_preload_failed;
 } ldso_stage0_state_t;
 
 volatile ldso_stage0_state_t g_ldso_stage0_state;
@@ -129,6 +136,66 @@ static uint64_t ldso_auxv_lookup(const ldso_auxv_entry_t *auxv, uint64_t key)
     return 0U;
 }
 
+static int ldso_str_starts_with(const char *value, const char *prefix, uint64_t prefix_len)
+{
+    uint64_t index;
+
+    if (!value || !prefix) {
+        return 0;
+    }
+
+    for (index = 0U; index < prefix_len; index++) {
+        if (value[index] != prefix[index]) {
+            return 0;
+        }
+    }
+
+    return 1;
+}
+
+static int ldso_is_preload_delimiter(char c)
+{
+    return c == ' ' || c == ':';
+}
+
+static const char *const *ldso_find_envp(const uint64_t *initial_stack)
+{
+    uint64_t argc;
+    const uint64_t *cursor;
+
+    if (!initial_stack) {
+        return 0;
+    }
+
+    argc = initial_stack[0];
+    cursor = ldso_stack_skip_argv(initial_stack + 1U, argc);
+    if (!cursor) {
+        return 0;
+    }
+
+    return (const char *const *)cursor;
+}
+
+static const char *ldso_find_env_value(const uint64_t *initial_stack, const char *key, uint64_t key_len)
+{
+    uint64_t index = 0U;
+    const char *const *envp = ldso_find_envp(initial_stack);
+
+    if (!envp || !key || key_len == 0U) {
+        return 0;
+    }
+
+    while (envp[index]) {
+        const char *entry = envp[index];
+        if (ldso_str_starts_with(entry, key, key_len)) {
+            return entry + key_len;
+        }
+        index++;
+    }
+
+    return 0;
+}
+
 static void ldso_builtin_touch(void)
 {
 }
@@ -161,6 +228,9 @@ static int ldso_stage0_resolve_symbol(const char *name, uint64_t *address, void 
 
 static int ldso_stage0_register_builtin_symbols(void)
 {
+    int registered_primary;
+    int registered_alias;
+
     g_ldso_stage0_builtin_symbols[0].name = "gnuos_libc_stub_touch";
     g_ldso_stage0_builtin_symbols[0].address = (uint64_t)(uintptr_t)ldso_builtin_touch;
     g_ldso_stage0_builtin_symbols[1].name = "_exit";
@@ -174,10 +244,63 @@ static int ldso_stage0_register_builtin_symbols(void)
     g_ldso_stage0_builtin_symbols[5].name = "dlerror";
     g_ldso_stage0_builtin_symbols[5].address = (uint64_t)(uintptr_t)ldso_dlerror;
 
-    return ldso_dlfcn_register_builtin_object(
+    registered_primary = ldso_dlfcn_register_builtin_object(
         "stage0-builtins",
         g_ldso_stage0_builtin_symbols,
         6U);
+    registered_alias = ldso_dlfcn_register_builtin_object(
+        "libc.so.6",
+        g_ldso_stage0_builtin_symbols,
+        6U);
+
+    if (registered_primary != 0 || registered_alias != 0) {
+        return -1;
+    }
+
+    return 0;
+}
+
+static void ldso_stage0_apply_ld_preload(const uint64_t *initial_stack)
+{
+    const char *value;
+    const char *cursor;
+
+    value = ldso_find_env_value(initial_stack, LDSO_LD_PRELOAD_KEY, LDSO_LD_PRELOAD_KEY_LEN);
+    if (!value || value[0] == '\0') {
+        return;
+    }
+
+    g_ldso_stage0_state.ld_preload_seen = 1U;
+    cursor = value;
+    while (*cursor) {
+        char token[LDSO_PRELOAD_TOKEN_MAX];
+        uint64_t token_len = 0U;
+
+        while (*cursor && ldso_is_preload_delimiter(*cursor)) {
+            cursor++;
+        }
+        if (!*cursor) {
+            break;
+        }
+
+        while (*cursor && !ldso_is_preload_delimiter(*cursor)) {
+            if (token_len < (LDSO_PRELOAD_TOKEN_MAX - 1U)) {
+                token[token_len++] = *cursor;
+            }
+            cursor++;
+        }
+        token[token_len] = '\0';
+        if (token_len == 0U) {
+            continue;
+        }
+
+        g_ldso_stage0_state.ld_preload_attempted++;
+        if (ldso_dlopen(token, LDSO_RTLD_NOW | LDSO_RTLD_GLOBAL)) {
+            g_ldso_stage0_state.ld_preload_loaded++;
+        } else {
+            g_ldso_stage0_state.ld_preload_failed++;
+        }
+    }
 }
 
 static uint64_t ldso_compute_load_bias(const ldso_elf_layout_t *layout, uint64_t at_phdr)
@@ -214,6 +337,10 @@ static void ldso_stage0_state_reset(void)
     g_ldso_stage0_state.init_sequence_completed = 0U;
     g_ldso_stage0_state.dlfcn_ready = 0U;
     g_ldso_stage0_state.builtin_object_registered = 0U;
+    g_ldso_stage0_state.ld_preload_seen = 0U;
+    g_ldso_stage0_state.ld_preload_attempted = 0U;
+    g_ldso_stage0_state.ld_preload_loaded = 0U;
+    g_ldso_stage0_state.ld_preload_failed = 0U;
 }
 
 void ldso_stage0_bootstrap(const uint64_t *initial_stack)
@@ -262,6 +389,7 @@ void ldso_stage0_bootstrap(const uint64_t *initial_stack)
         g_ldso_stage0_state.dlfcn_ready = 1U;
         if (ldso_stage0_register_builtin_symbols() == 0) {
             g_ldso_stage0_state.builtin_object_registered = 1U;
+            ldso_stage0_apply_ld_preload(initial_stack);
         }
 
         g_ldso_stage0_state.dynamic_ready = 1U;
