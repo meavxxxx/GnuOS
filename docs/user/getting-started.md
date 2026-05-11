@@ -15,6 +15,14 @@ make ARCH=x86_64 image
 make ARCH=x86_64 run
 ```
 
+## Userspace target scaffold (`x86_64-gnuos`)
+
+```bash
+make ARCH=x86_64 userspace
+```
+
+See `docs/user/gnuos-target-bootstrap.md` for details.
+
 ## Windows quick setup (PowerShell + WSL/Docker)
 
 ```powershell

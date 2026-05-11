@@ -10,4 +10,4 @@ Current status:
 
 - x86_64 scaffolding is implemented in `x86_64/`.
 - These files are intended for early libc/glibc porting work.
-- They are built by `make userspace` and smoke-linked with `userspace/init/init_minimal.c`.
+- They are built by `make userspace`, installed into a `x86_64-gnuos` sysroot, and smoke-linked with `userspace/init/init_minimal.c`.

@@ -240,7 +240,7 @@
 
 #### 2.2 GNU C Library (glibc) — портирование
 
-- [ ] Портирование glibc на новую платформу (`gnuos` target)
+- [x] Портирование glibc на новую платформу (`gnuos` target)
 - [x] Реализация `start files` (crt0.S, crti.S, crtn.S)
 - [ ] Поддержка динамической линковки (ld.so / PT_INTERP)
 - [ ] POSIX threads (pthreads) поверх clone()
