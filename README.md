@@ -114,7 +114,7 @@
 
 #### 0.3 Инструменты качества
 
-- [ ] Статический анализатор (cppcheck, clang-tidy)
+- [x] Статический анализатор (cppcheck, clang-tidy)
 - [x] Форматтер кода (`clang-format`, `.editorconfig`)
 - [ ] Покрытие кода (gcov / lcov)
 - [ ] Fuzzing-инфраструктура (AFL++, libFuzzer)

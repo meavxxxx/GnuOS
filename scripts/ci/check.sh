@@ -6,3 +6,6 @@ ARCH="${ARCH:-x86_64}"
 make ARCH="$ARCH" clean
 make ARCH="$ARCH" kernel
 
+if [[ "${RUN_STATIC_ANALYSIS:-0}" == "1" ]]; then
+    bash scripts/ci/static-analysis.sh
+fi

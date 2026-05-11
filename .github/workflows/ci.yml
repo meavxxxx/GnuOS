@@ -16,3 +16,19 @@ jobs:
       - name: Build bootstrap kernel
         run: make ARCH=x86_64 TARGET=x86_64-linux-gnu kernel
 
+  static-analysis:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install analysis deps
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            make \
+            gcc-x86-64-linux-gnu \
+            binutils-x86-64-linux-gnu \
+            cppcheck \
+            clang-tidy \
+            bear
+      - name: Run static analysis
+        run: bash scripts/ci/static-analysis.sh
