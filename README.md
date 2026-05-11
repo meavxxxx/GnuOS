@@ -251,6 +251,7 @@
 - [x] Минимальный file I/O ABI scaffolding (`<fcntl.h>`, `<sys/stat.h>`, `read`/`write`/...)
 - [x] Минимальный memory-mapping ABI scaffolding (`<sys/mman.h>`, `mmap`/`munmap`/`mprotect`)
 - [x] Минимальный errno ABI scaffolding (`<errno.h>`, `__errno_location`)
+- [x] POSIX-совместимый возврат ошибок для stage0-стабов (`-1`/`MAP_FAILED` + `errno`) для `sem*`, `sig*`, socket/file/mmap API
 - [x] Поддержка TLS (Thread-Local Storage, `%fs` base)
 - [x] Реализация `dl_iterate_phdr`, `backtrace()`
 
@@ -278,6 +279,7 @@
 - [x] Минимальный сетевой ABI scaffolding (`socket`/`bind`/`connect` + `hton*`/`inet_*`)
 - [x] Минимальный файловый ABI scaffolding (`<fcntl.h>`, `<sys/stat.h>`, `<unistd.h>`)
 - [x] Минимальный `mmap` ABI scaffolding (`<sys/mman.h>`, `mmap`/`munmap`/`mprotect`)
+- [x] Минимальная POSIX-совместимость ошибок: `-1`/`MAP_FAILED` + `errno` в stage0 `libc.so.6` stub
 - [ ] Тест-сьют POSIX Conformance (POSIX Test Suite / LTP)
 
 ---

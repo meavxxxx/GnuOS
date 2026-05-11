@@ -77,6 +77,36 @@ int *__errno_location(void)
     return &g_errno_value;
 }
 
+static int gnuos_fail_int(int error)
+{
+    g_errno_value = error;
+    return -1;
+}
+
+static ssize_t gnuos_fail_ssize(int error)
+{
+    g_errno_value = error;
+    return (ssize_t)-1;
+}
+
+static off_t gnuos_fail_off(int error)
+{
+    g_errno_value = error;
+    return (off_t)-1;
+}
+
+static void *gnuos_fail_ptr(int error)
+{
+    g_errno_value = error;
+    return MAP_FAILED;
+}
+
+static const char *gnuos_fail_cstr(int error)
+{
+    g_errno_value = error;
+    return 0;
+}
+
 void gnuos_libc_stub_touch(void)
 {
 }
@@ -333,10 +363,10 @@ int pthread_attr_getstacksize(const pthread_attr_t *attr, size_t *stacksize)
 int sem_init(sem_t *sem, int pshared, unsigned int value)
 {
     if (!sem) {
-        return GNUOS_PTHREAD_EINVAL;
+        return gnuos_fail_int(GNUOS_PTHREAD_EINVAL);
     }
     if (pshared != 0) {
-        return GNUOS_PTHREAD_ENOSYS;
+        return gnuos_fail_int(GNUOS_PTHREAD_ENOSYS);
     }
 
     sem->__value = value;
@@ -346,7 +376,7 @@ int sem_init(sem_t *sem, int pshared, unsigned int value)
 int sem_destroy(sem_t *sem)
 {
     if (!sem) {
-        return GNUOS_PTHREAD_EINVAL;
+        return gnuos_fail_int(GNUOS_PTHREAD_EINVAL);
     }
 
     sem->__value = 0U;
@@ -356,10 +386,10 @@ int sem_destroy(sem_t *sem)
 int sem_wait(sem_t *sem)
 {
     if (!sem) {
-        return GNUOS_PTHREAD_EINVAL;
+        return gnuos_fail_int(GNUOS_PTHREAD_EINVAL);
     }
     if (sem->__value == 0U) {
-        return GNUOS_SEM_EAGAIN;
+        return gnuos_fail_int(GNUOS_SEM_EAGAIN);
     }
 
     sem->__value--;
@@ -374,10 +404,10 @@ int sem_trywait(sem_t *sem)
 int sem_post(sem_t *sem)
 {
     if (!sem) {
-        return GNUOS_PTHREAD_EINVAL;
+        return gnuos_fail_int(GNUOS_PTHREAD_EINVAL);
     }
     if (sem->__value == GNUOS_SEM_VALUE_MAX) {
-        return GNUOS_SEM_EOVERFLOW;
+        return gnuos_fail_int(GNUOS_SEM_EOVERFLOW);
     }
 
     sem->__value++;
@@ -387,7 +417,7 @@ int sem_post(sem_t *sem)
 int sem_getvalue(sem_t *sem, int *sval)
 {
     if (!sem || !sval) {
-        return GNUOS_PTHREAD_EINVAL;
+        return gnuos_fail_int(GNUOS_PTHREAD_EINVAL);
     }
 
     *sval = (int)sem->__value;
@@ -468,7 +498,7 @@ const char *inet_ntop(int af, const void *src, char *dst, socklen_t size)
     (void)src;
     (void)dst;
     (void)size;
-    return 0;
+    return gnuos_fail_cstr(GNUOS_PTHREAD_ENOSYS);
 }
 
 int inet_pton(int af, const char *src, void *dst)
@@ -476,7 +506,7 @@ int inet_pton(int af, const char *src, void *dst)
     (void)af;
     (void)src;
     (void)dst;
-    return GNUOS_PTHREAD_ENOSYS;
+    return gnuos_fail_int(GNUOS_PTHREAD_ENOSYS);
 }
 
 int socket(int domain, int type, int protocol)
@@ -485,15 +515,15 @@ int socket(int domain, int type, int protocol)
     gnuos_socket_entry_t *entry;
 
     if (!gnuos_socket_supported_domain(domain)) {
-        return -GNUOS_SOCKET_EAFNOSUPPORT;
+        return gnuos_fail_int(GNUOS_SOCKET_EAFNOSUPPORT);
     }
     if (!gnuos_socket_supported_type(type)) {
-        return -GNUOS_SOCKET_EPROTONOSUPPORT;
+        return gnuos_fail_int(GNUOS_SOCKET_EPROTONOSUPPORT);
     }
 
     sockfd = gnuos_socket_alloc_fd();
     if (sockfd < 0) {
-        return -GNUOS_SOCKET_EMFILE;
+        return gnuos_fail_int(GNUOS_SOCKET_EMFILE);
     }
 
     entry = gnuos_socket_get(sockfd);
@@ -510,7 +540,7 @@ int bind(int sockfd, const struct sockaddr *addr, socklen_t addrlen)
     (void)addrlen;
 
     if (!entry) {
-        return -GNUOS_SOCKET_ENOTSOCK;
+        return gnuos_fail_int(GNUOS_SOCKET_ENOTSOCK);
     }
 
     return 0;
@@ -522,7 +552,7 @@ int listen(int sockfd, int backlog)
     (void)backlog;
 
     if (!entry) {
-        return -GNUOS_SOCKET_ENOTSOCK;
+        return gnuos_fail_int(GNUOS_SOCKET_ENOTSOCK);
     }
 
     entry->listening = 1;
@@ -536,13 +566,13 @@ int accept(int sockfd, struct sockaddr *addr, socklen_t *addrlen)
     (void)addrlen;
 
     if (!entry) {
-        return -GNUOS_SOCKET_ENOTSOCK;
+        return gnuos_fail_int(GNUOS_SOCKET_ENOTSOCK);
     }
     if (!entry->listening) {
-        return -GNUOS_SOCKET_EOPNOTSUPP;
+        return gnuos_fail_int(GNUOS_SOCKET_EOPNOTSUPP);
     }
 
-    return -GNUOS_PTHREAD_ENOSYS;
+    return gnuos_fail_int(GNUOS_PTHREAD_ENOSYS);
 }
 
 int connect(int sockfd, const struct sockaddr *addr, socklen_t addrlen)
@@ -552,7 +582,7 @@ int connect(int sockfd, const struct sockaddr *addr, socklen_t addrlen)
     (void)addrlen;
 
     if (!entry) {
-        return -GNUOS_SOCKET_ENOTSOCK;
+        return gnuos_fail_int(GNUOS_SOCKET_ENOTSOCK);
     }
 
     entry->connected = 1;
@@ -566,10 +596,10 @@ ssize_t send(int sockfd, const void *buf, size_t len, int flags)
     (void)flags;
 
     if (!entry) {
-        return -GNUOS_SOCKET_ENOTSOCK;
+        return gnuos_fail_ssize(GNUOS_SOCKET_ENOTSOCK);
     }
     if (!entry->connected) {
-        return -GNUOS_SOCKET_EOPNOTSUPP;
+        return gnuos_fail_ssize(GNUOS_SOCKET_EOPNOTSUPP);
     }
 
     return (ssize_t)len;
@@ -583,10 +613,10 @@ ssize_t recv(int sockfd, void *buf, size_t len, int flags)
     (void)flags;
 
     if (!entry) {
-        return -GNUOS_SOCKET_ENOTSOCK;
+        return gnuos_fail_ssize(GNUOS_SOCKET_ENOTSOCK);
     }
     if (!entry->connected) {
-        return -GNUOS_SOCKET_EOPNOTSUPP;
+        return gnuos_fail_ssize(GNUOS_SOCKET_EOPNOTSUPP);
     }
 
     return 0;
@@ -623,10 +653,10 @@ int shutdown(int sockfd, int how)
     gnuos_socket_entry_t *entry = gnuos_socket_get(sockfd);
 
     if (!entry) {
-        return -GNUOS_SOCKET_ENOTSOCK;
+        return gnuos_fail_int(GNUOS_SOCKET_ENOTSOCK);
     }
     if (how < SHUT_RD || how > SHUT_RDWR) {
-        return -GNUOS_PTHREAD_EINVAL;
+        return gnuos_fail_int(GNUOS_PTHREAD_EINVAL);
     }
 
     entry->shutdown_how = how;
@@ -675,15 +705,15 @@ int open(const char *pathname, int flags, ...)
     gnuos_file_entry_t *entry;
 
     if (!pathname || pathname[0] == '\0') {
-        return -GNUOS_PTHREAD_EINVAL;
+        return gnuos_fail_int(GNUOS_PTHREAD_EINVAL);
     }
     if (pathname[0] != '/' && pathname[0] != '.') {
-        return -GNUOS_FILE_ENOENT;
+        return gnuos_fail_int(GNUOS_FILE_ENOENT);
     }
 
     fd = gnuos_file_alloc_fd();
     if (fd < 0) {
-        return -GNUOS_FILE_ENFILE;
+        return gnuos_fail_int(GNUOS_FILE_ENFILE);
     }
 
     entry = gnuos_file_get(fd);
@@ -713,7 +743,7 @@ int close(int fd)
         return 0;
     }
 
-    return -GNUOS_FILE_EBADF;
+    return gnuos_fail_int(GNUOS_FILE_EBADF);
 }
 
 ssize_t read(int fd, void *buf, size_t count)
@@ -727,10 +757,10 @@ ssize_t read(int fd, void *buf, size_t count)
         return recv(fd, buf, count, 0);
     }
     if (!file_entry) {
-        return -GNUOS_FILE_EBADF;
+        return gnuos_fail_ssize(GNUOS_FILE_EBADF);
     }
     if (!buf && count != 0U) {
-        return -GNUOS_PTHREAD_EINVAL;
+        return gnuos_fail_ssize(GNUOS_PTHREAD_EINVAL);
     }
 
     for (i = 0; i < count; i++) {
@@ -750,7 +780,7 @@ ssize_t write(int fd, const void *buf, size_t count)
         return send(fd, buf, count, 0);
     }
     if (!file_entry) {
-        return -GNUOS_FILE_EBADF;
+        return gnuos_fail_ssize(GNUOS_FILE_EBADF);
     }
 
     file_entry->offset += (off_t)count;
@@ -767,7 +797,7 @@ off_t lseek(int fd, off_t offset, int whence)
     off_t new_offset;
 
     if (!entry) {
-        return -GNUOS_FILE_EBADF;
+        return gnuos_fail_off(GNUOS_FILE_EBADF);
     }
 
     switch (whence) {
@@ -781,12 +811,12 @@ off_t lseek(int fd, off_t offset, int whence)
         base = entry->st.st_size;
         break;
     default:
-        return -GNUOS_PTHREAD_EINVAL;
+        return gnuos_fail_off(GNUOS_PTHREAD_EINVAL);
     }
 
     new_offset = base + offset;
     if (new_offset < 0) {
-        return -GNUOS_PTHREAD_EINVAL;
+        return gnuos_fail_off(GNUOS_PTHREAD_EINVAL);
     }
 
     entry->offset = new_offset;
@@ -798,10 +828,10 @@ int fstat(int fd, struct stat *buf)
     gnuos_file_entry_t *entry = gnuos_file_get(fd);
 
     if (!buf) {
-        return -GNUOS_PTHREAD_EINVAL;
+        return gnuos_fail_int(GNUOS_PTHREAD_EINVAL);
     }
     if (!entry) {
-        return -GNUOS_FILE_EBADF;
+        return gnuos_fail_int(GNUOS_FILE_EBADF);
     }
 
     *buf = entry->st;
@@ -811,10 +841,10 @@ int fstat(int fd, struct stat *buf)
 int stat(const char *path, struct stat *buf)
 {
     if (!path || !buf) {
-        return -GNUOS_PTHREAD_EINVAL;
+        return gnuos_fail_int(GNUOS_PTHREAD_EINVAL);
     }
     if (path[0] != '/' && path[0] != '.') {
-        return -GNUOS_FILE_ENOENT;
+        return gnuos_fail_int(GNUOS_FILE_ENOENT);
     }
 
     buf->st_mode = S_IFREG | S_IRUSR | S_IWUSR | S_IRGRP | S_IROTH;
@@ -829,10 +859,10 @@ int access(const char *pathname, int mode)
 {
     (void)mode;
     if (!pathname || pathname[0] == '\0') {
-        return -GNUOS_PTHREAD_EINVAL;
+        return gnuos_fail_int(GNUOS_PTHREAD_EINVAL);
     }
     if (pathname[0] != '/' && pathname[0] != '.') {
-        return -GNUOS_FILE_ENOENT;
+        return gnuos_fail_int(GNUOS_FILE_ENOENT);
     }
 
     return 0;
@@ -842,17 +872,17 @@ int mkdir(const char *path, mode_t mode)
 {
     (void)mode;
     if (!path || path[0] == '\0') {
-        return -GNUOS_PTHREAD_EINVAL;
+        return gnuos_fail_int(GNUOS_PTHREAD_EINVAL);
     }
 
-    return GNUOS_PTHREAD_ENOSYS;
+    return gnuos_fail_int(GNUOS_PTHREAD_ENOSYS);
 }
 
 int chmod(const char *path, mode_t mode)
 {
     (void)mode;
     if (!path || path[0] == '\0') {
-        return -GNUOS_PTHREAD_EINVAL;
+        return gnuos_fail_int(GNUOS_PTHREAD_EINVAL);
     }
 
     return 0;
@@ -862,7 +892,7 @@ int fchmod(int fd, mode_t mode)
 {
     gnuos_file_entry_t *entry = gnuos_file_get(fd);
     if (!entry) {
-        return -GNUOS_FILE_EBADF;
+        return gnuos_fail_int(GNUOS_FILE_EBADF);
     }
 
     entry->mode = mode;
@@ -894,7 +924,7 @@ void *mmap(void *addr, size_t length, int prot, int flags, int fd, off_t offset)
     (void)offset;
 
     if (length == 0U) {
-        return MAP_FAILED;
+        return gnuos_fail_ptr(GNUOS_PTHREAD_EINVAL);
     }
     if ((flags & MAP_FIXED) != 0 && addr) {
         return addr;
@@ -903,7 +933,7 @@ void *mmap(void *addr, size_t length, int prot, int flags, int fd, off_t offset)
     aligned_length = gnuos_align_up(length, 4096U);
     next = g_mmap_pool_next;
     if (next > GNUOS_MMAN_POOL_SIZE || aligned_length > (GNUOS_MMAN_POOL_SIZE - next)) {
-        return MAP_FAILED;
+        return gnuos_fail_ptr(ENOMEM);
     }
 
     mapped = (void *)&g_mmap_pool[next];
@@ -914,7 +944,7 @@ void *mmap(void *addr, size_t length, int prot, int flags, int fd, off_t offset)
 int munmap(void *addr, size_t length)
 {
     if (!addr || length == 0U) {
-        return -GNUOS_PTHREAD_EINVAL;
+        return gnuos_fail_int(GNUOS_PTHREAD_EINVAL);
     }
 
     return 0;
@@ -924,7 +954,7 @@ int mprotect(void *addr, size_t len, int prot)
 {
     (void)prot;
     if (!addr || len == 0U) {
-        return -GNUOS_PTHREAD_EINVAL;
+        return gnuos_fail_int(GNUOS_PTHREAD_EINVAL);
     }
 
     return 0;
@@ -943,7 +973,7 @@ static sigset_t gnuos_signal_bit(int signo)
 int sigemptyset(sigset_t *set)
 {
     if (!set) {
-        return GNUOS_PTHREAD_EINVAL;
+        return gnuos_fail_int(GNUOS_PTHREAD_EINVAL);
     }
 
     *set = 0UL;
@@ -953,7 +983,7 @@ int sigemptyset(sigset_t *set)
 int sigfillset(sigset_t *set)
 {
     if (!set) {
-        return GNUOS_PTHREAD_EINVAL;
+        return gnuos_fail_int(GNUOS_PTHREAD_EINVAL);
     }
 
     *set = ~(sigset_t)0UL;
@@ -963,7 +993,7 @@ int sigfillset(sigset_t *set)
 int sigaddset(sigset_t *set, int signo)
 {
     if (!set || !gnuos_signal_valid(signo)) {
-        return GNUOS_PTHREAD_EINVAL;
+        return gnuos_fail_int(GNUOS_PTHREAD_EINVAL);
     }
 
     *set |= gnuos_signal_bit(signo);
@@ -973,7 +1003,7 @@ int sigaddset(sigset_t *set, int signo)
 int sigdelset(sigset_t *set, int signo)
 {
     if (!set || !gnuos_signal_valid(signo)) {
-        return GNUOS_PTHREAD_EINVAL;
+        return gnuos_fail_int(GNUOS_PTHREAD_EINVAL);
     }
 
     *set &= ~(gnuos_signal_bit(signo));
@@ -983,7 +1013,7 @@ int sigdelset(sigset_t *set, int signo)
 int sigismember(const sigset_t *set, int signo)
 {
     if (!set || !gnuos_signal_valid(signo)) {
-        return -1;
+        return gnuos_fail_int(GNUOS_PTHREAD_EINVAL);
     }
 
     return ((*set & gnuos_signal_bit(signo)) != 0UL) ? 1 : 0;
@@ -992,7 +1022,7 @@ int sigismember(const sigset_t *set, int signo)
 int sigaction(int signum, const struct sigaction *act, struct sigaction *oldact)
 {
     if (!gnuos_signal_valid(signum) || signum == SIGKILL || signum == SIGSTOP) {
-        return GNUOS_PTHREAD_EINVAL;
+        return gnuos_fail_int(GNUOS_PTHREAD_EINVAL);
     }
 
     if (oldact) {
@@ -1027,7 +1057,7 @@ int sigprocmask(int how, const sigset_t *set, sigset_t *oldset)
         g_signal_mask = *set;
         return 0;
     default:
-        return GNUOS_PTHREAD_EINVAL;
+        return gnuos_fail_int(GNUOS_PTHREAD_EINVAL);
     }
 }
 
@@ -1035,10 +1065,10 @@ int kill(pid_t pid, int sig)
 {
     (void)pid;
     if (!gnuos_signal_valid(sig)) {
-        return GNUOS_PTHREAD_EINVAL;
+        return gnuos_fail_int(GNUOS_PTHREAD_EINVAL);
     }
 
-    return GNUOS_PTHREAD_ENOSYS;
+    return gnuos_fail_int(GNUOS_PTHREAD_ENOSYS);
 }
 
 int raise(int sig)
