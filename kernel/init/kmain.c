@@ -359,6 +359,7 @@ void kmain(uint64_t boot_magic, uint64_t boot_info_addr)
     uint64_t shm_reader_size = 0U;
     int64_t syscall_gettid_result = 0LL;
     int64_t syscall_unknown_result = 0LL;
+    uint8_t syscall_fastpath_ready = 0U;
     task_t *current_task = NULL;
     task_t *rcu_reader_task = NULL;
     task_t *rcu_updater_task = NULL;
@@ -428,6 +429,7 @@ void kmain(uint64_t boot_magic, uint64_t boot_info_addr)
     shm_init();
     ipc_init();
     syscall_init();
+    x86_64_syscall_fastpath_init();
     pic_clear_mask(0U);
     pic_clear_mask(1U);
     pit_init(100U);
@@ -455,11 +457,13 @@ void kmain(uint64_t boot_magic, uint64_t boot_info_addr)
     serial_write("GNU OS: IRQ0 timer and IRQ1 keyboard unmasked; interrupts enabled.\n");
     syscall_gettid_result = syscall_dispatch(SYS_GETTID, 0U, 0U, 0U, 0U, 0U, 0U);
     syscall_unknown_result = syscall_dispatch(511U, 0U, 0U, 0U, 0U, 0U, 0U);
+    syscall_fastpath_ready = x86_64_syscall_fastpath_ready();
     kprintf(
-        "GNU OS: syscall demo gettid=%d unknown=%d registered=%u\n",
+        "GNU OS: syscall demo gettid=%d unknown=%d registered=%u fastpath=%u\n",
         syscall_gettid_result,
         syscall_unknown_result,
-        (uint64_t)syscall_registered_count());
+        (uint64_t)syscall_registered_count(),
+        (uint64_t)syscall_fastpath_ready);
 
     ipc_boot_channel = ipc_channel_create("boot-log");
     if (ipc_boot_channel >= 0) {

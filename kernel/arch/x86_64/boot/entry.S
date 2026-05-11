@@ -33,6 +33,8 @@ gdt64:
     .quad 0x0000000000000000
     .quad 0x00AF9A000000FFFF
     .quad 0x00AF92000000FFFF
+    .quad 0x00AFF2000000FFFF
+    .quad 0x00AFFA000000FFFF
 gdt64_end:
 
 gdt64_ptr:

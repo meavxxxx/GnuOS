@@ -10,7 +10,7 @@
 8. Kernel virtual allocator maps pages from PMM in a dedicated VA region.
 9. Large (2 MiB) bootstrap mappings can be split into 4K tables on demand.
 10. Scheduler bootstrap initializes ready queue and creates idle task.
-11. Core low-level subsystems are initialized (PS/2 keyboard, PCI/MSI scan, ISA DMA, capability table, SHM/IPC channels, syscall table).
+11. Core low-level subsystems are initialized (PS/2 keyboard, PCI/MSI scan, ISA DMA, capability table, SHM/IPC channels, syscall table, syscall/sysret fast-path MSRs).
 12. PIC is remapped, PIT timer is configured, IRQ0/IRQ1 are unmasked, and hardware interrupts are enabled.
 13. Scheduler dispatches kernel tasks using saved/restored task contexts.
 14. Demo tasks exercise RCU grace periods and IPC (queued + rendezvous + capability transfer + SHM handoff).

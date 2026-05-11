@@ -9,8 +9,10 @@ KERNEL_LINKER_SCRIPT := kernel/arch/x86_64/linker.ld
 ARCH_C_SOURCES := kernel/arch/x86_64/serial.c
 ARCH_C_SOURCES += kernel/arch/x86_64/interrupts/pic.c
 ARCH_C_SOURCES += kernel/arch/x86_64/timer/pit.c
+ARCH_C_SOURCES += kernel/arch/x86_64/syscall/fastpath.c
 ARCH_ASM_SOURCES := kernel/arch/x86_64/boot/multiboot2_header.S \
 	kernel/arch/x86_64/boot/entry.S \
+	kernel/arch/x86_64/syscall/entry.S \
 	kernel/arch/x86_64/sched/context_switch.S
 else
 $(error Unsupported ARCH "$(ARCH)". Supported now: x86_64)

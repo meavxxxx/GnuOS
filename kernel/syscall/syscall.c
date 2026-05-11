@@ -144,6 +144,22 @@ int64_t syscall_dispatch(
     return handler(arg0, arg1, arg2, arg3, arg4, arg5);
 }
 
+int64_t syscall_dispatch_fastpath(const syscall_fastpath_frame_t *frame)
+{
+    if (!frame) {
+        return SYSCALL_ENOSYS;
+    }
+
+    return syscall_dispatch(
+        frame->number,
+        frame->arg0,
+        frame->arg1,
+        frame->arg2,
+        frame->arg3,
+        frame->arg4,
+        frame->arg5);
+}
+
 uint16_t syscall_registered_count(void)
 {
     uint16_t count;
