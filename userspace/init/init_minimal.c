@@ -4,6 +4,7 @@
 #include <execinfo.h>
 #include <gnuos/tls.h>
 #include <link.h>
+#include <pthread.h>
 
 extern void gnuos_libc_stub_touch(void);
 
@@ -19,6 +20,11 @@ static int gnuos_dl_phdr_cb(struct dl_phdr_info *info, size_t size, void *data)
     (void)data;
     return 0;
 }
+
+static void *gnuos_pthread_noop(void *arg)
+{
+    return arg;
+}
 #endif
 
 int main(int argc, char **argv, char **envp)
@@ -31,6 +37,8 @@ int main(int argc, char **argv, char **envp)
     void *frames[8];
     gnuos_tls_index_t tls_index;
     void *tls_base;
+    pthread_t thread;
+    void *thread_result = 0;
 
     gnuos_libc_stub_touch();
     tls_base = __gnuos_get_tls_base();
@@ -40,6 +48,11 @@ int main(int argc, char **argv, char **envp)
     (void)__tls_get_addr(&tls_index);
     (void)backtrace(frames, 8);
     (void)dl_iterate_phdr(gnuos_dl_phdr_cb, 0);
+    (void)pthread_self();
+    (void)pthread_equal(pthread_self(), pthread_self());
+    (void)pthread_create(&thread, 0, gnuos_pthread_noop, 0);
+    (void)pthread_join(thread, &thread_result);
+    (void)pthread_detach(thread);
 #endif
     return 0;
 }

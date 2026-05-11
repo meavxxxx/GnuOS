@@ -244,6 +244,7 @@
 - [x] Реализация `start files` (crt0.S, crti.S, crtn.S)
 - [x] Поддержка динамической линковки (ld.so / PT_INTERP)
 - [ ] POSIX threads (pthreads) поверх clone()
+- [x] Минимальный pthread ABI scaffolding (`<pthread.h>`, `pthread_*` stub symbols)
 - [x] Поддержка TLS (Thread-Local Storage, `%fs` base)
 - [x] Реализация `dl_iterate_phdr`, `backtrace()`
 

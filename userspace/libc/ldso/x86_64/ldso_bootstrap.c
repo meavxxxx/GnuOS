@@ -3,6 +3,7 @@
 #include <execinfo.h>
 #include <gnuos/tls.h>
 #include <link.h>
+#include <pthread.h>
 
 #include "ldso_dlfcn.h"
 #include "ldso_elf.h"
@@ -19,6 +20,10 @@
 #define LDSO_LD_PRELOAD_KEY "LD_PRELOAD="
 #define LDSO_LD_PRELOAD_KEY_LEN 11U
 #define LDSO_PRELOAD_TOKEN_MAX 128U
+#define LDSO_STAGE0_BUILTIN_SYMBOL_COUNT 17U
+
+#define GNUOS_PTHREAD_ENOSYS 38
+#define GNUOS_PTHREAD_MAIN_THREAD ((pthread_t)1UL)
 
 typedef struct {
     uint64_t a_type;
@@ -52,7 +57,7 @@ typedef struct {
 } ldso_stage0_state_t;
 
 volatile ldso_stage0_state_t g_ldso_stage0_state;
-static ldso_dlfcn_builtin_symbol_t g_ldso_stage0_builtin_symbols[12];
+static ldso_dlfcn_builtin_symbol_t g_ldso_stage0_builtin_symbols[LDSO_STAGE0_BUILTIN_SYMBOL_COUNT];
 static uintptr_t g_ldso_stage0_tls_storage[64];
 static uintptr_t g_ldso_stage0_tls_base;
 
@@ -233,6 +238,49 @@ void *__tls_get_addr(gnuos_tls_index_t *index)
     return (void *)(g_ldso_stage0_tls_base + index->ti_offset);
 }
 
+int pthread_create(
+    pthread_t *thread,
+    const pthread_attr_t *attr,
+    void *(*start_routine)(void *),
+    void *arg)
+{
+    (void)attr;
+    (void)start_routine;
+    (void)arg;
+
+    if (thread) {
+        *thread = 0UL;
+    }
+
+    return GNUOS_PTHREAD_ENOSYS;
+}
+
+pthread_t pthread_self(void)
+{
+    return GNUOS_PTHREAD_MAIN_THREAD;
+}
+
+int pthread_equal(pthread_t thread1, pthread_t thread2)
+{
+    return thread1 == thread2;
+}
+
+int pthread_join(pthread_t thread, void **retval)
+{
+    (void)thread;
+    if (retval) {
+        *retval = 0;
+    }
+
+    return GNUOS_PTHREAD_ENOSYS;
+}
+
+int pthread_detach(pthread_t thread)
+{
+    (void)thread;
+    return GNUOS_PTHREAD_ENOSYS;
+}
+
 void __gnuos_store_startup(unsigned long argc, char **argv, char **envp)
 {
     (void)argc;
@@ -350,15 +398,25 @@ static int ldso_stage0_register_builtin_symbols(void)
     g_ldso_stage0_builtin_symbols[10].address = (uint64_t)(uintptr_t)__gnuos_get_tls_base;
     g_ldso_stage0_builtin_symbols[11].name = "__tls_get_addr";
     g_ldso_stage0_builtin_symbols[11].address = (uint64_t)(uintptr_t)__tls_get_addr;
+    g_ldso_stage0_builtin_symbols[12].name = "pthread_create";
+    g_ldso_stage0_builtin_symbols[12].address = (uint64_t)(uintptr_t)pthread_create;
+    g_ldso_stage0_builtin_symbols[13].name = "pthread_self";
+    g_ldso_stage0_builtin_symbols[13].address = (uint64_t)(uintptr_t)pthread_self;
+    g_ldso_stage0_builtin_symbols[14].name = "pthread_equal";
+    g_ldso_stage0_builtin_symbols[14].address = (uint64_t)(uintptr_t)pthread_equal;
+    g_ldso_stage0_builtin_symbols[15].name = "pthread_join";
+    g_ldso_stage0_builtin_symbols[15].address = (uint64_t)(uintptr_t)pthread_join;
+    g_ldso_stage0_builtin_symbols[16].name = "pthread_detach";
+    g_ldso_stage0_builtin_symbols[16].address = (uint64_t)(uintptr_t)pthread_detach;
 
     registered_primary = ldso_dlfcn_register_builtin_object(
         "stage0-builtins",
         g_ldso_stage0_builtin_symbols,
-        12U);
+        LDSO_STAGE0_BUILTIN_SYMBOL_COUNT);
     registered_alias = ldso_dlfcn_register_builtin_object(
         "libc.so.6",
         g_ldso_stage0_builtin_symbols,
-        12U);
+        LDSO_STAGE0_BUILTIN_SYMBOL_COUNT);
 
     if (registered_primary != 0 || registered_alias != 0) {
         return -1;

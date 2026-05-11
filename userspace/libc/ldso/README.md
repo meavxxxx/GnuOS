@@ -25,6 +25,9 @@ Current status:
 - `libc.so.6` stub now exports `dl_iterate_phdr` and `backtrace` scaffolding APIs.
 - `libc.so.6` and stage-0 resolver expose TLS scaffolding APIs:
   `__gnuos_set_tls_base`, `__gnuos_get_tls_base`, `__tls_get_addr`.
+- `libc.so.6` and stage-0 resolver now expose pthread scaffolding APIs:
+  `pthread_create`, `pthread_self`, `pthread_equal`, `pthread_join`, `pthread_detach`
+  (currently ENOSYS-style stubs, not `clone()`-backed threading yet).
 - The sysroot installer places:
   - loader at `/lib/ld-gnuos.so.1`
   - stub libc at `/usr/lib/libc.so.6` (and `/usr/lib/libc.so` for link-time lookup)

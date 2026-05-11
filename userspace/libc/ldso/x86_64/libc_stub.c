@@ -1,6 +1,7 @@
 #include <execinfo.h>
 #include <gnuos/tls.h>
 #include <link.h>
+#include <pthread.h>
 
 #define GNUOS_AT_NULL 0UL
 #define GNUOS_AT_PHDR 3UL
@@ -12,6 +13,9 @@
 static char **g_startup_envp;
 static unsigned long g_tls_bootstrap_area[64];
 static unsigned long g_tls_base_addr;
+
+#define GNUOS_PTHREAD_ENOSYS 38
+#define GNUOS_PTHREAD_MAIN_THREAD ((pthread_t)1UL)
 
 void gnuos_libc_stub_touch(void)
 {
@@ -179,6 +183,49 @@ void *__tls_get_addr(gnuos_tls_index_t *index)
     gnuos_tls_bootstrap_init();
     base = g_tls_base_addr;
     return (void *)(base + index->ti_offset);
+}
+
+int pthread_create(
+    pthread_t *thread,
+    const pthread_attr_t *attr,
+    void *(*start_routine)(void *),
+    void *arg)
+{
+    (void)attr;
+    (void)start_routine;
+    (void)arg;
+
+    if (thread) {
+        *thread = 0UL;
+    }
+
+    return GNUOS_PTHREAD_ENOSYS;
+}
+
+pthread_t pthread_self(void)
+{
+    return GNUOS_PTHREAD_MAIN_THREAD;
+}
+
+int pthread_equal(pthread_t thread1, pthread_t thread2)
+{
+    return thread1 == thread2;
+}
+
+int pthread_join(pthread_t thread, void **retval)
+{
+    (void)thread;
+    if (retval) {
+        *retval = 0;
+    }
+
+    return GNUOS_PTHREAD_ENOSYS;
+}
+
+int pthread_detach(pthread_t thread)
+{
+    (void)thread;
+    return GNUOS_PTHREAD_ENOSYS;
 }
 
 __attribute__((noreturn)) void _exit(int status)
