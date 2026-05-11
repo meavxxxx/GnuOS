@@ -14,6 +14,9 @@ Thanks for helping build GNU OS.
 Branching and merge rules are defined in
 [`docs/process/branching-policy.md`](docs/process/branching-policy.md).
 
+Public task tracker rules are defined in
+[`docs/process/task-tracker.md`](docs/process/task-tracker.md).
+
 ## Pull request requirements
 
 - CI must pass.

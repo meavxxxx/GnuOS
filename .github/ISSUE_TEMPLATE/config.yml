@@ -1,0 +1,11 @@
+blank_issues_enabled: false
+contact_links:
+  - name: GNU OS Roadmap
+    url: https://github.com/meavxxxx/TempOS/blob/main/README.md
+    about: Validate scope and order against the roadmap before opening an issue.
+  - name: GNU OS RFC process
+    url: https://github.com/meavxxxx/TempOS/blob/main/docs/rfc/README.md
+    about: Use RFC flow for architecture-wide changes.
+  - name: GNU OS Task Tracker Guide
+    url: https://github.com/meavxxxx/TempOS/blob/main/docs/process/task-tracker.md
+    about: Tracker labels, triage, and issue lifecycle.

@@ -98,8 +98,8 @@
 
 - [x] Создание Git-монорепозитория с политиками ветвления
 - [x] Настройка CI/CD пайплайна (builds, unit-тесты, интеграционные тесты)
-- [ ] Публичный трекер задач (Savannah / GitLab)
-- [ ] Система RFC (Request for Comments) для архитектурных решений
+- [x] Публичный трекер задач (Savannah / GitLab)
+- [x] Система RFC (Request for Comments) для архитектурных решений
 - [x] Кодекс участника (Code of Conduct)
 - [x] Документация для контрибьюторов (`CONTRIBUTING.md`)
 - [ ] Настройка mailing list (GNU Mailman)
