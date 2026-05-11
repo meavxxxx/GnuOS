@@ -42,6 +42,8 @@ Current status:
 - `libc.so.6` and stage-0 resolver expose file I/O scaffolding APIs:
   `open`, `close`, `read`, `write`, `lseek`, `fstat`, `stat`, `access`,
   `chmod`, `fchmod`, `mkdir`, `umask`.
+- `libc.so.6` and stage-0 resolver expose minimal process/cwd scaffolding APIs:
+  `getpid`, `getppid`, `getuid`, `geteuid`, `getgid`, `getegid`, `chdir`, `getcwd`.
 - `libc.so.6` and stage-0 resolver expose memory-mapping scaffolding APIs:
   `mmap`, `munmap`, `mprotect`.
 - `libc.so.6` and stage-0 resolver expose errno scaffolding API:

@@ -69,6 +69,13 @@ int main(int argc, char **argv, char **envp)
     mode_t old_umask = 0;
     void *mapped = MAP_FAILED;
     int saved_errno = 0;
+    pid_t self_pid = 0;
+    pid_t parent_pid = 0;
+    uid_t uid = 0;
+    uid_t euid = 0;
+    gid_t gid = 0;
+    gid_t egid = 0;
+    char cwd_buf[64];
 
     gnuos_libc_stub_touch();
     tls_base = __gnuos_get_tls_base();
@@ -146,6 +153,21 @@ int main(int argc, char **argv, char **envp)
     }
     (void)stat("./dummy", &file_stat);
     (void)mkdir("./tmp", 0755);
+    self_pid = getpid();
+    parent_pid = getppid();
+    uid = getuid();
+    euid = geteuid();
+    gid = getgid();
+    egid = getegid();
+    (void)self_pid;
+    (void)parent_pid;
+    (void)uid;
+    (void)euid;
+    (void)gid;
+    (void)egid;
+    (void)getcwd(cwd_buf, sizeof(cwd_buf));
+    (void)chdir("./");
+    (void)getcwd(cwd_buf, sizeof(cwd_buf));
     errno = 0;
     saved_errno = errno;
     (void)saved_errno;

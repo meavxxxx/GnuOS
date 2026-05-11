@@ -249,6 +249,7 @@
 - [x] Минимальный signal ABI scaffolding (`<signal.h>`, `sig*`/`kill`/`raise` stubs)
 - [x] Минимальный socket ABI scaffolding (`<sys/socket.h>`, `<netinet/in.h>`, `<arpa/inet.h>`)
 - [x] Минимальный file I/O ABI scaffolding (`<fcntl.h>`, `<sys/stat.h>`, `read`/`write`/...)
+- [x] Минимальный process/cwd ABI scaffolding (`getpid`/`getuid`/`getgid`/`chdir`/`getcwd`)
 - [x] Минимальный memory-mapping ABI scaffolding (`<sys/mman.h>`, `mmap`/`munmap`/`mprotect`)
 - [x] Минимальный errno ABI scaffolding (`<errno.h>`, `__errno_location`)
 - [x] POSIX-совместимый возврат ошибок для stage0-стабов (`-1`/`MAP_FAILED` + `errno`) для `sem*`, `sig*`, socket/file/mmap API
@@ -278,6 +279,7 @@
 - [ ] `<sys/socket.h>`, `<netinet/in.h>`, `<arpa/inet.h>`
 - [x] Минимальный сетевой ABI scaffolding (`socket`/`bind`/`connect` + `hton*`/`inet_*`)
 - [x] Минимальный файловый ABI scaffolding (`<fcntl.h>`, `<sys/stat.h>`, `<unistd.h>`)
+- [x] Минимальный process/cwd ABI scaffolding (`getpid`/`getuid`/`getgid`/`chdir`/`getcwd`)
 - [x] Минимальный `mmap` ABI scaffolding (`<sys/mman.h>`, `mmap`/`munmap`/`mprotect`)
 - [x] Минимальная POSIX-совместимость ошибок: `-1`/`MAP_FAILED` + `errno` в stage0 `libc.so.6` stub
 - [ ] Тест-сьют POSIX Conformance (POSIX Test Suite / LTP)

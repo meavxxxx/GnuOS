@@ -30,7 +30,7 @@
 #define LDSO_LD_PRELOAD_KEY "LD_PRELOAD="
 #define LDSO_LD_PRELOAD_KEY_LEN 11U
 #define LDSO_PRELOAD_TOKEN_MAX 128U
-#define LDSO_STAGE0_BUILTIN_SYMBOL_COUNT 69U
+#define LDSO_STAGE0_BUILTIN_SYMBOL_COUNT 77U
 
 #define GNUOS_PTHREAD_ENOSYS 38
 #define GNUOS_PTHREAD_EINVAL 22
@@ -54,6 +54,7 @@
 #define GNUOS_FILE_FD_BASE 64
 #define GNUOS_FILE_MAX 64
 #define GNUOS_MMAN_POOL_SIZE (2UL * 1024UL * 1024UL)
+#define GNUOS_PATH_MAX 256U
 
 typedef struct {
     uint64_t a_type;
@@ -114,6 +115,7 @@ static gnuos_file_entry_t g_file_table[GNUOS_FILE_MAX];
 static mode_t g_file_umask = 0;
 static unsigned char g_mmap_pool[GNUOS_MMAN_POOL_SIZE];
 static size_t g_mmap_pool_next = 0;
+static char g_cwd[GNUOS_PATH_MAX] = "/";
 
 int *__errno_location(void)
 {
@@ -145,6 +147,12 @@ static void *gnuos_fail_ptr(int error)
 }
 
 static const char *gnuos_fail_cstr(int error)
+{
+    g_errno_value = error;
+    return 0;
+}
+
+static char *gnuos_fail_str(int error)
 {
     g_errno_value = error;
     return 0;
@@ -959,6 +967,83 @@ mode_t umask(mode_t mask)
     return old;
 }
 
+pid_t getpid(void)
+{
+    return 1;
+}
+
+pid_t getppid(void)
+{
+    return 0;
+}
+
+uid_t getuid(void)
+{
+    return 0U;
+}
+
+uid_t geteuid(void)
+{
+    return 0U;
+}
+
+gid_t getgid(void)
+{
+    return 0U;
+}
+
+gid_t getegid(void)
+{
+    return 0U;
+}
+
+int chdir(const char *path)
+{
+    size_t length = 0U;
+    size_t index;
+
+    if (!path || path[0] == '\0') {
+        return gnuos_fail_int(GNUOS_PTHREAD_EINVAL);
+    }
+    if (path[0] != '/' && path[0] != '.') {
+        return gnuos_fail_int(GNUOS_FILE_ENOENT);
+    }
+
+    while (path[length] != '\0') {
+        if (length >= (GNUOS_PATH_MAX - 1U)) {
+            return gnuos_fail_int(ERANGE);
+        }
+        length++;
+    }
+
+    for (index = 0U; index <= length; index++) {
+        g_cwd[index] = path[index];
+    }
+    return 0;
+}
+
+char *getcwd(char *buf, size_t size)
+{
+    size_t length = 0U;
+    size_t index;
+
+    if (!buf || size == 0U) {
+        return gnuos_fail_str(GNUOS_PTHREAD_EINVAL);
+    }
+
+    while (g_cwd[length] != '\0') {
+        length++;
+    }
+    if (size <= length) {
+        return gnuos_fail_str(ERANGE);
+    }
+
+    for (index = 0U; index <= length; index++) {
+        buf[index] = g_cwd[index];
+    }
+    return buf;
+}
+
 static size_t gnuos_align_up(size_t value, size_t alignment)
 {
     size_t mask = alignment - 1U;
@@ -1377,6 +1462,22 @@ static int ldso_stage0_register_builtin_symbols(void)
     g_ldso_stage0_builtin_symbols[67].address = (uint64_t)(uintptr_t)mprotect;
     g_ldso_stage0_builtin_symbols[68].name = "__errno_location";
     g_ldso_stage0_builtin_symbols[68].address = (uint64_t)(uintptr_t)__errno_location;
+    g_ldso_stage0_builtin_symbols[69].name = "getpid";
+    g_ldso_stage0_builtin_symbols[69].address = (uint64_t)(uintptr_t)getpid;
+    g_ldso_stage0_builtin_symbols[70].name = "getppid";
+    g_ldso_stage0_builtin_symbols[70].address = (uint64_t)(uintptr_t)getppid;
+    g_ldso_stage0_builtin_symbols[71].name = "getuid";
+    g_ldso_stage0_builtin_symbols[71].address = (uint64_t)(uintptr_t)getuid;
+    g_ldso_stage0_builtin_symbols[72].name = "geteuid";
+    g_ldso_stage0_builtin_symbols[72].address = (uint64_t)(uintptr_t)geteuid;
+    g_ldso_stage0_builtin_symbols[73].name = "getgid";
+    g_ldso_stage0_builtin_symbols[73].address = (uint64_t)(uintptr_t)getgid;
+    g_ldso_stage0_builtin_symbols[74].name = "getegid";
+    g_ldso_stage0_builtin_symbols[74].address = (uint64_t)(uintptr_t)getegid;
+    g_ldso_stage0_builtin_symbols[75].name = "chdir";
+    g_ldso_stage0_builtin_symbols[75].address = (uint64_t)(uintptr_t)chdir;
+    g_ldso_stage0_builtin_symbols[76].name = "getcwd";
+    g_ldso_stage0_builtin_symbols[76].address = (uint64_t)(uintptr_t)getcwd;
 
     registered_primary = ldso_dlfcn_register_builtin_object(
         "stage0-builtins",
