@@ -1,4 +1,11 @@
 # Unit Tests
 
-Unit tests for kernel and userspace components will be added here.
+Current tests:
 
+- `ldso_dlfcn_test.c` - host-side coverage smoke test for stage0 `ldso_dlfcn`.
+
+Run locally from repo root:
+
+```bash
+bash scripts/ci/coverage.sh
+```

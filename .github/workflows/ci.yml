@@ -32,3 +32,19 @@ jobs:
             bear
       - name: Run static analysis
         run: bash scripts/ci/static-analysis.sh
+
+  coverage:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install coverage deps
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y gcc lcov
+      - name: Run coverage pipeline
+        run: bash scripts/ci/coverage.sh
+      - name: Upload coverage artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage-lcov
+          path: build/coverage/coverage.filtered.info
