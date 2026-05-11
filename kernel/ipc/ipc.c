@@ -1,6 +1,7 @@
 #include <stddef.h>
 #include <stdint.h>
 
+#include <gnuos/capability.h>
 #include <gnuos/ipc.h>
 #include <gnuos/printk.h>
 #include <gnuos/sched.h>
@@ -137,6 +138,166 @@ static void ipc_wait_hint(void)
     }
 }
 
+static uint64_t ipc_current_tid(void)
+{
+    task_t *current = sched_current_task();
+    if (current) {
+        return current->tid;
+    }
+
+    return 0U;
+}
+
+static int ipc_resolve_sender_tid(uint64_t sender_tid, uint64_t *out_sender_tid)
+{
+    uint64_t current_tid = ipc_current_tid();
+
+    if (!out_sender_tid) {
+        return 0;
+    }
+
+    if (sender_tid == 0U) {
+        *out_sender_tid = current_tid;
+        return 1;
+    }
+
+    if (current_tid != 0U && sender_tid != current_tid) {
+        return 0;
+    }
+
+    *out_sender_tid = sender_tid;
+    return 1;
+}
+
+static int ipc_channel_send_internal(
+    int channel_id,
+    const void *payload,
+    uint16_t size,
+    uint64_t sender_tid,
+    uint8_t has_capability,
+    uint16_t capability_id,
+    uint16_t capability_rights)
+{
+    ipc_channel_t *channel;
+    ipc_message_t *message;
+    uint64_t resolved_sender_tid = 0U;
+    uint64_t irq_flags;
+
+    if (!payload || size == 0U || size > IPC_MESSAGE_DATA_MAX) {
+        return -1;
+    }
+    if (!ipc_resolve_sender_tid(sender_tid, &resolved_sender_tid)) {
+        return -1;
+    }
+
+    if (has_capability) {
+        if (capability_validate_transfer(
+                capability_id,
+                resolved_sender_tid,
+                capability_rights) != 0) {
+            return -4;
+        }
+    }
+
+    irq_flags = ipc_irq_save();
+    spinlock_lock(&g_ipc_lock);
+
+    if (!ipc_is_valid_channel_id(channel_id)) {
+        spinlock_unlock(&g_ipc_lock);
+        ipc_irq_restore(irq_flags);
+        return -2;
+    }
+
+    channel = &g_ipc_channels[(uint16_t)channel_id];
+    if (channel->count >= IPC_CHANNEL_QUEUE_CAPACITY) {
+        spinlock_unlock(&g_ipc_lock);
+        ipc_irq_restore(irq_flags);
+        return -3;
+    }
+
+    message = &channel->queue[channel->tail];
+    message->sender_tid = resolved_sender_tid;
+    message->size = size;
+    message->has_capability = has_capability ? 1U : 0U;
+    message->capability_id = has_capability ? capability_id : 0U;
+    message->capability_rights = has_capability ? capability_rights : 0U;
+
+    for (uint16_t index = 0U; index < size; index++) {
+        message->data[index] = ((const uint8_t *)payload)[index];
+    }
+
+    channel->tail = (uint16_t)((channel->tail + 1U) % IPC_CHANNEL_QUEUE_CAPACITY);
+    channel->count++;
+
+    spinlock_unlock(&g_ipc_lock);
+    ipc_irq_restore(irq_flags);
+    return 0;
+}
+
+static int ipc_channel_recv_internal(
+    int channel_id,
+    void *payload,
+    uint16_t payload_capacity,
+    uint16_t *out_size,
+    uint64_t *out_sender_tid,
+    uint8_t *out_has_capability,
+    uint16_t *out_capability_id,
+    uint16_t *out_capability_rights)
+{
+    ipc_channel_t *channel;
+    ipc_message_t *message;
+    uint64_t irq_flags;
+
+    if (!payload ||
+        !out_size ||
+        !out_sender_tid ||
+        !out_has_capability ||
+        !out_capability_id ||
+        !out_capability_rights) {
+        return -1;
+    }
+
+    irq_flags = ipc_irq_save();
+    spinlock_lock(&g_ipc_lock);
+
+    if (!ipc_is_valid_channel_id(channel_id)) {
+        spinlock_unlock(&g_ipc_lock);
+        ipc_irq_restore(irq_flags);
+        return -2;
+    }
+
+    channel = &g_ipc_channels[(uint16_t)channel_id];
+    if (channel->count == 0U) {
+        spinlock_unlock(&g_ipc_lock);
+        ipc_irq_restore(irq_flags);
+        return -3;
+    }
+
+    message = &channel->queue[channel->head];
+    if (payload_capacity < message->size) {
+        spinlock_unlock(&g_ipc_lock);
+        ipc_irq_restore(irq_flags);
+        return -4;
+    }
+
+    for (uint16_t index = 0U; index < message->size; index++) {
+        ((uint8_t *)payload)[index] = message->data[index];
+    }
+
+    *out_size = message->size;
+    *out_sender_tid = message->sender_tid;
+    *out_has_capability = message->has_capability;
+    *out_capability_id = message->capability_id;
+    *out_capability_rights = message->capability_rights;
+
+    channel->head = (uint16_t)((channel->head + 1U) % IPC_CHANNEL_QUEUE_CAPACITY);
+    channel->count--;
+
+    spinlock_unlock(&g_ipc_lock);
+    ipc_irq_restore(irq_flags);
+    return 0;
+}
+
 void ipc_init(void)
 {
     uint64_t irq_flags;
@@ -154,6 +315,9 @@ void ipc_init(void)
         g_ipc_channels[index].rendezvous_generation = 0U;
         g_ipc_channels[index].rendezvous_message.sender_tid = 0U;
         g_ipc_channels[index].rendezvous_message.size = 0U;
+        g_ipc_channels[index].rendezvous_message.has_capability = 0U;
+        g_ipc_channels[index].rendezvous_message.capability_id = 0U;
+        g_ipc_channels[index].rendezvous_message.capability_rights = 0U;
         ipc_name_copy(g_ipc_channels[index].name, "");
     }
     g_ipc_channel_count = 0U;
@@ -207,6 +371,9 @@ int ipc_channel_create(const char *name)
     g_ipc_channels[(uint16_t)free_slot].rendezvous_generation = 0U;
     g_ipc_channels[(uint16_t)free_slot].rendezvous_message.sender_tid = 0U;
     g_ipc_channels[(uint16_t)free_slot].rendezvous_message.size = 0U;
+    g_ipc_channels[(uint16_t)free_slot].rendezvous_message.has_capability = 0U;
+    g_ipc_channels[(uint16_t)free_slot].rendezvous_message.capability_id = 0U;
+    g_ipc_channels[(uint16_t)free_slot].rendezvous_message.capability_rights = 0U;
     ipc_name_copy(g_ipc_channels[(uint16_t)free_slot].name, name);
     g_ipc_channel_count++;
 
@@ -237,51 +404,36 @@ int ipc_channel_find(const char *name)
 
 int ipc_channel_send(int channel_id, const void *payload, uint16_t size, uint64_t sender_tid)
 {
-    ipc_channel_t *channel;
-    ipc_message_t *message;
-    task_t *current_task = NULL;
-    uint64_t irq_flags;
+    return ipc_channel_send_internal(
+        channel_id,
+        payload,
+        size,
+        sender_tid,
+        0U,
+        0U,
+        0U);
+}
 
-    if (!payload || size == 0U || size > IPC_MESSAGE_DATA_MAX) {
+int ipc_channel_send_capability(
+    int channel_id,
+    const void *payload,
+    uint16_t size,
+    uint64_t sender_tid,
+    uint16_t capability_id,
+    uint16_t capability_rights)
+{
+    if (capability_id == 0U || capability_rights == 0U) {
         return -1;
     }
 
-    if (sender_tid == 0U) {
-        current_task = sched_current_task();
-        if (current_task) {
-            sender_tid = current_task->tid;
-        }
-    }
-
-    irq_flags = ipc_irq_save();
-    spinlock_lock(&g_ipc_lock);
-
-    if (!ipc_is_valid_channel_id(channel_id)) {
-        spinlock_unlock(&g_ipc_lock);
-        ipc_irq_restore(irq_flags);
-        return -2;
-    }
-
-    channel = &g_ipc_channels[(uint16_t)channel_id];
-    if (channel->count >= IPC_CHANNEL_QUEUE_CAPACITY) {
-        spinlock_unlock(&g_ipc_lock);
-        ipc_irq_restore(irq_flags);
-        return -3;
-    }
-
-    message = &channel->queue[channel->tail];
-    message->sender_tid = sender_tid;
-    message->size = size;
-    for (uint16_t index = 0U; index < size; index++) {
-        message->data[index] = ((const uint8_t *)payload)[index];
-    }
-
-    channel->tail = (uint16_t)((channel->tail + 1U) % IPC_CHANNEL_QUEUE_CAPACITY);
-    channel->count++;
-
-    spinlock_unlock(&g_ipc_lock);
-    ipc_irq_restore(irq_flags);
-    return 0;
+    return ipc_channel_send_internal(
+        channel_id,
+        payload,
+        size,
+        sender_tid,
+        1U,
+        capability_id,
+        capability_rights);
 }
 
 int ipc_channel_recv(
@@ -291,55 +443,78 @@ int ipc_channel_recv(
     uint16_t *out_size,
     uint64_t *out_sender_tid)
 {
-    ipc_channel_t *channel;
-    ipc_message_t *message;
-    uint64_t irq_flags;
+    uint8_t has_capability = 0U;
+    uint16_t capability_id = 0U;
+    uint16_t capability_rights = 0U;
 
-    if (!payload || !out_size || !out_sender_tid) {
+    return ipc_channel_recv_internal(
+        channel_id,
+        payload,
+        payload_capacity,
+        out_size,
+        out_sender_tid,
+        &has_capability,
+        &capability_id,
+        &capability_rights);
+}
+
+int ipc_channel_recv_capability(
+    int channel_id,
+    void *payload,
+    uint16_t payload_capacity,
+    uint16_t *out_size,
+    uint64_t *out_sender_tid,
+    uint16_t *out_capability_id,
+    uint16_t *out_capability_rights)
+{
+    uint8_t has_capability = 0U;
+    uint16_t capability_id = 0U;
+    uint16_t capability_rights = 0U;
+    uint64_t receiver_tid = 0U;
+    int status = 0;
+
+    if (!out_capability_id || !out_capability_rights) {
         return -1;
     }
 
-    irq_flags = ipc_irq_save();
-    spinlock_lock(&g_ipc_lock);
+    *out_capability_id = 0U;
+    *out_capability_rights = 0U;
 
-    if (!ipc_is_valid_channel_id(channel_id)) {
-        spinlock_unlock(&g_ipc_lock);
-        ipc_irq_restore(irq_flags);
-        return -2;
+    status = ipc_channel_recv_internal(
+        channel_id,
+        payload,
+        payload_capacity,
+        out_size,
+        out_sender_tid,
+        &has_capability,
+        &capability_id,
+        &capability_rights);
+    if (status != 0) {
+        return status;
     }
 
-    channel = &g_ipc_channels[(uint16_t)channel_id];
-    if (channel->count == 0U) {
-        spinlock_unlock(&g_ipc_lock);
-        ipc_irq_restore(irq_flags);
-        return -3;
+    if (!has_capability) {
+        return 0;
     }
 
-    message = &channel->queue[channel->head];
-    if (payload_capacity < message->size) {
-        spinlock_unlock(&g_ipc_lock);
-        ipc_irq_restore(irq_flags);
-        return -4;
+    receiver_tid = ipc_current_tid();
+    if (capability_copy_for_owner(
+            capability_id,
+            *out_sender_tid,
+            capability_rights,
+            receiver_tid,
+            out_capability_id) != 0) {
+        return -5;
     }
 
-    for (uint16_t index = 0U; index < message->size; index++) {
-        ((uint8_t *)payload)[index] = message->data[index];
-    }
-
-    *out_size = message->size;
-    *out_sender_tid = message->sender_tid;
-    channel->head = (uint16_t)((channel->head + 1U) % IPC_CHANNEL_QUEUE_CAPACITY);
-    channel->count--;
-
-    spinlock_unlock(&g_ipc_lock);
-    ipc_irq_restore(irq_flags);
+    *out_capability_rights = capability_rights;
     return 0;
 }
 
 int ipc_channel_rendezvous_send(int channel_id, const void *payload, uint16_t size, uint64_t sender_tid)
 {
     ipc_channel_t *channel;
-    task_t *current_task;
+    uint64_t resolved_sender_tid = 0U;
     uint64_t base_generation = 0U;
     uint64_t irq_flags;
 
@@ -347,11 +522,8 @@ int ipc_channel_rendezvous_send(int channel_id, const void *payload, uint16_t si
         return -1;
     }
 
-    if (sender_tid == 0U) {
-        current_task = sched_current_task();
-        if (current_task) {
-            sender_tid = current_task->tid;
-        }
+    if (!ipc_resolve_sender_tid(sender_tid, &resolved_sender_tid)) {
+        return -1;
     }
 
     for (;;) {
@@ -366,8 +538,11 @@ int ipc_channel_rendezvous_send(int channel_id, const void *payload, uint16_t si
 
         channel = &g_ipc_channels[(uint16_t)channel_id];
         if (!channel->rendezvous_pending) {
-            channel->rendezvous_message.sender_tid = sender_tid;
+            channel->rendezvous_message.sender_tid = resolved_sender_tid;
             channel->rendezvous_message.size = size;
+            channel->rendezvous_message.has_capability = 0U;
+            channel->rendezvous_message.capability_id = 0U;
+            channel->rendezvous_message.capability_rights = 0U;
             for (uint16_t index = 0U; index < size; index++) {
                 channel->rendezvous_message.data[index] = ((const uint8_t *)payload)[index];
             }

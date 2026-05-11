@@ -1,6 +1,7 @@
 #include <stddef.h>
 #include <stdint.h>
 
+#include <gnuos/capability.h>
 #include <gnuos/interrupts.h>
 #include <gnuos/keyboard.h>
 #include <gnuos/dma.h>
@@ -345,6 +346,10 @@ void kmain(uint64_t boot_magic, uint64_t boot_info_addr)
     char ipc_recv_buffer[IPC_MESSAGE_DATA_MAX + 1U];
     uint16_t ipc_recv_size = 0U;
     uint64_t ipc_sender_tid = 0U;
+    uint16_t ipc_source_capability = 0U;
+    uint16_t ipc_received_capability = 0U;
+    uint16_t ipc_received_capability_rights = 0U;
+    capability_info_t ipc_received_capability_info;
     task_t *current_task = NULL;
     task_t *rcu_reader_task = NULL;
     task_t *rcu_updater_task = NULL;
@@ -410,6 +415,7 @@ void kmain(uint64_t boot_magic, uint64_t boot_info_addr)
     ps2_keyboard_init();
     pci_init();
     dma_init();
+    capability_init();
     ipc_init();
     pic_clear_mask(0U);
     pic_clear_mask(1U);
@@ -440,6 +446,7 @@ void kmain(uint64_t boot_magic, uint64_t boot_info_addr)
     ipc_boot_channel = ipc_channel_create("boot-log");
     if (ipc_boot_channel >= 0) {
         static const char ipc_boot_message[] = "ipc online";
+        static const char ipc_capability_message[] = "capability online";
 
         if (ipc_channel_send(
                 ipc_boot_channel,
@@ -458,6 +465,43 @@ void kmain(uint64_t boot_magic, uint64_t boot_info_addr)
                     ipc_recv_buffer,
                     ipc_sender_tid,
                     ipc_channel_count());
+            }
+        }
+
+        if (capability_create(
+                0U,
+                0x43415044454D4F31ULL,
+                (uint16_t)(CAP_RIGHT_READ | CAP_RIGHT_WRITE | CAP_RIGHT_TRANSFER),
+                &ipc_source_capability) == 0) {
+            if (ipc_channel_send_capability(
+                    ipc_boot_channel,
+                    ipc_capability_message,
+                    (uint16_t)(sizeof(ipc_capability_message) - 1U),
+                    0U,
+                    ipc_source_capability,
+                    CAP_RIGHT_READ) == 0) {
+                if (ipc_channel_recv_capability(
+                        ipc_boot_channel,
+                        ipc_recv_buffer,
+                        IPC_MESSAGE_DATA_MAX,
+                        &ipc_recv_size,
+                        &ipc_sender_tid,
+                        &ipc_received_capability,
+                        &ipc_received_capability_rights) == 0) {
+                    ipc_recv_buffer[ipc_recv_size] = '\0';
+                    if (capability_describe(
+                            ipc_received_capability,
+                            &ipc_received_capability_info) == 0) {
+                        kprintf(
+                            "GNU OS: IPC capability message='%s' src=%u dst=%u rights=0x%X object=0x%X caps=%u\n",
+                            ipc_recv_buffer,
+                            (uint64_t)ipc_source_capability,
+                            (uint64_t)ipc_received_capability,
+                            (uint64_t)ipc_received_capability_rights,
+                            ipc_received_capability_info.object_id,
+                            (uint64_t)capability_count());
+                    }
+                }
             }
         }
     }
