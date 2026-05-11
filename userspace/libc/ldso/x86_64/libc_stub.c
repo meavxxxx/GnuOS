@@ -1,4 +1,5 @@
 #include <execinfo.h>
+#include <gnuos/tls.h>
 #include <link.h>
 
 #define GNUOS_AT_NULL 0UL
@@ -9,9 +10,21 @@
 #define GNUOS_PT_PHDR 6U
 
 static char **g_startup_envp;
+static unsigned long g_tls_bootstrap_area[64];
+static unsigned long g_tls_base_addr;
 
 void gnuos_libc_stub_touch(void)
 {
+}
+
+static void gnuos_tls_bootstrap_init(void)
+{
+    if (g_tls_base_addr != 0UL) {
+        return;
+    }
+
+    g_tls_bootstrap_area[0] = (unsigned long)&g_tls_bootstrap_area[0];
+    g_tls_base_addr = (unsigned long)&g_tls_bootstrap_area[0];
 }
 
 void __gnuos_store_startup(unsigned long argc, char **argv, char **envp)
@@ -19,6 +32,7 @@ void __gnuos_store_startup(unsigned long argc, char **argv, char **envp)
     (void)argc;
     (void)argv;
     g_startup_envp = envp;
+    gnuos_tls_bootstrap_init();
 }
 
 static const unsigned long *gnuos_startup_auxv(void)
@@ -139,6 +153,32 @@ int backtrace(void **buffer, int size)
     }
 
     return count;
+}
+
+int __gnuos_set_tls_base(void *base)
+{
+    gnuos_tls_bootstrap_init();
+    g_tls_base_addr = (unsigned long)base;
+    return 0;
+}
+
+void *__gnuos_get_tls_base(void)
+{
+    gnuos_tls_bootstrap_init();
+    return (void *)g_tls_base_addr;
+}
+
+void *__tls_get_addr(gnuos_tls_index_t *index)
+{
+    unsigned long base;
+
+    if (!index) {
+        return 0;
+    }
+
+    gnuos_tls_bootstrap_init();
+    base = g_tls_base_addr;
+    return (void *)(base + index->ti_offset);
 }
 
 __attribute__((noreturn)) void _exit(int status)

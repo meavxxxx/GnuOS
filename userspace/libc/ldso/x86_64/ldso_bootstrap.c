@@ -1,6 +1,7 @@
 #include <stdint.h>
 
 #include <execinfo.h>
+#include <gnuos/tls.h>
 #include <link.h>
 
 #include "ldso_dlfcn.h"
@@ -51,7 +52,9 @@ typedef struct {
 } ldso_stage0_state_t;
 
 volatile ldso_stage0_state_t g_ldso_stage0_state;
-static ldso_dlfcn_builtin_symbol_t g_ldso_stage0_builtin_symbols[9];
+static ldso_dlfcn_builtin_symbol_t g_ldso_stage0_builtin_symbols[12];
+static uintptr_t g_ldso_stage0_tls_storage[64];
+static uintptr_t g_ldso_stage0_tls_base;
 
 static const uint64_t *ldso_stack_skip_argv(const uint64_t *cursor, uint64_t argc)
 {
@@ -210,6 +213,26 @@ static __attribute__((noreturn)) void ldso_builtin_exit(void)
     }
 }
 
+int __gnuos_set_tls_base(void *base)
+{
+    g_ldso_stage0_tls_base = (uintptr_t)base;
+    return 0;
+}
+
+void *__gnuos_get_tls_base(void)
+{
+    return (void *)g_ldso_stage0_tls_base;
+}
+
+void *__tls_get_addr(gnuos_tls_index_t *index)
+{
+    if (!index) {
+        return 0;
+    }
+
+    return (void *)(g_ldso_stage0_tls_base + index->ti_offset);
+}
+
 void __gnuos_store_startup(unsigned long argc, char **argv, char **envp)
 {
     (void)argc;
@@ -321,15 +344,21 @@ static int ldso_stage0_register_builtin_symbols(void)
     g_ldso_stage0_builtin_symbols[7].address = (uint64_t)(uintptr_t)dl_iterate_phdr;
     g_ldso_stage0_builtin_symbols[8].name = "backtrace";
     g_ldso_stage0_builtin_symbols[8].address = (uint64_t)(uintptr_t)backtrace;
+    g_ldso_stage0_builtin_symbols[9].name = "__gnuos_set_tls_base";
+    g_ldso_stage0_builtin_symbols[9].address = (uint64_t)(uintptr_t)__gnuos_set_tls_base;
+    g_ldso_stage0_builtin_symbols[10].name = "__gnuos_get_tls_base";
+    g_ldso_stage0_builtin_symbols[10].address = (uint64_t)(uintptr_t)__gnuos_get_tls_base;
+    g_ldso_stage0_builtin_symbols[11].name = "__tls_get_addr";
+    g_ldso_stage0_builtin_symbols[11].address = (uint64_t)(uintptr_t)__tls_get_addr;
 
     registered_primary = ldso_dlfcn_register_builtin_object(
         "stage0-builtins",
         g_ldso_stage0_builtin_symbols,
-        9U);
+        12U);
     registered_alias = ldso_dlfcn_register_builtin_object(
         "libc.so.6",
         g_ldso_stage0_builtin_symbols,
-        9U);
+        12U);
 
     if (registered_primary != 0 || registered_alias != 0) {
         return -1;
@@ -396,6 +425,8 @@ static uint64_t ldso_compute_load_bias(const ldso_elf_layout_t *layout, uint64_t
 
 static void ldso_stage0_state_reset(void)
 {
+    g_ldso_stage0_tls_base = (uintptr_t)&g_ldso_stage0_tls_storage[0];
+
     g_ldso_stage0_state.ready = 0U;
     g_ldso_stage0_state.at_base = 0U;
     g_ldso_stage0_state.at_entry = 0U;

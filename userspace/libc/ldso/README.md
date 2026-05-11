@@ -20,8 +20,11 @@ Current status:
   `PT_INTERP=/lib/ld-gnuos.so.1`.
 - Dynamic smoke executable includes both `DT_INIT` and `DT_INIT_ARRAY`.
 - `userspace/libc/include/dlfcn.h` is present for userspace ABI scaffolding.
+- `userspace/libc/include/gnuos/tls.h` is present for TLS ABI scaffolding.
 - `LD_PRELOAD` stage-0 support currently resolves pre-registered object names only.
 - `libc.so.6` stub now exports `dl_iterate_phdr` and `backtrace` scaffolding APIs.
+- `libc.so.6` and stage-0 resolver expose TLS scaffolding APIs:
+  `__gnuos_set_tls_base`, `__gnuos_get_tls_base`, `__tls_get_addr`.
 - The sysroot installer places:
   - loader at `/lib/ld-gnuos.so.1`
   - stub libc at `/usr/lib/libc.so.6` (and `/usr/lib/libc.so` for link-time lookup)
