@@ -3,6 +3,9 @@
 This directory hosts early dynamic-linker scaffolding for userspace ABI bring-up.
 
 - `x86_64/ldso_start.S` provides a stage-0 entrypoint for `ld-gnuos.so.1`.
+- `ldso_elf.c` + `ldso_elf.h` classify `PT_LOAD`, `PT_DYNAMIC`, `PT_GNU_RELRO`.
+- `x86_64/ldso_bootstrap.c` parses auxv (`AT_PHDR/AT_PHENT/AT_PHNUM`) and records
+  stage-0 program-header layout metadata.
 - `x86_64/libc_stub.c` provides a minimal shared `libc.so.6` stub used by smoke tests.
 
 Current status:

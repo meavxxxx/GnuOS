@@ -35,8 +35,14 @@ USER_STARTFILES_SOURCES := \
 USER_STARTFILES_OBJECTS := \
 	$(patsubst $(USER_STARTFILES_DIR)/%.S,$(BUILD_DIR)/$(USER_STARTFILES_DIR)/%.o,$(USER_STARTFILES_SOURCES))
 USER_LDSO_DIR := userspace/libc/ldso/$(ARCH)
-USER_LDSO_SOURCE := $(USER_LDSO_DIR)/ldso_start.S
-USER_LDSO_OBJECT := $(BUILD_DIR)/$(USER_LDSO_SOURCE:.S=.o)
+USER_LDSO_ASM_SOURCE := $(USER_LDSO_DIR)/ldso_start.S
+USER_LDSO_ASM_OBJECT := $(BUILD_DIR)/$(USER_LDSO_ASM_SOURCE:.S=.o)
+USER_LDSO_C_SOURCES := \
+	userspace/libc/ldso/ldso_elf.c \
+	$(USER_LDSO_DIR)/ldso_bootstrap.c
+USER_LDSO_C_OBJECTS := \
+	$(patsubst userspace/libc/ldso/%.c,$(BUILD_DIR)/userspace/libc/ldso/%.o,$(USER_LDSO_C_SOURCES))
+USER_LDSO_OBJECTS := $(USER_LDSO_ASM_OBJECT) $(USER_LDSO_C_OBJECTS)
 USER_LDSO_ELF := $(BUILD_DIR)/userspace/libc/ldso/ld-gnuos.so.1
 USER_LIBC_STUB_SOURCE := $(USER_LDSO_DIR)/libc_stub.c
 USER_LIBC_STUB_OBJECT := $(BUILD_DIR)/$(USER_LDSO_DIR)/libc_stub.pic.o
@@ -50,6 +56,7 @@ USER_HEADERS_DIR := userspace/libc/include
 USER_SYSROOT_DIR := $(BUILD_DIR)/sysroot/$(GNUOS_TARGET)
 USER_CFLAGS := -std=$(CSTD) -O2 -g -ffreestanding -fno-stack-protector -fno-pie \
 	-Wall -Wextra -Wpedantic --sysroot=$(USER_SYSROOT_DIR) -isystem $(USER_SYSROOT_DIR)/usr/include
+USER_LDSO_CFLAGS := $(USER_CFLAGS) -fPIC -Iuserspace/libc/ldso
 
 COMMON_CFLAGS := -std=$(CSTD) -O2 -g -ffreestanding -fno-stack-protector -fno-pie \
 	-mno-red-zone -mgeneral-regs-only -Wall -Wextra -Wpedantic -Iinclude -Ikernel/include
@@ -84,7 +91,8 @@ KERNEL_OBJECTS := \
 	$(patsubst %.S,$(BUILD_DIR)/%.o,$(ARCH_ASM_SOURCES))
 KERNEL_DEPS := $(KERNEL_OBJECTS:.o=.d)
 USER_DEPS := $(USER_STARTFILES_OBJECTS:.o=.d) $(USER_SMOKE_OBJECT:.o=.d) \
-	$(USER_SMOKE_DYNAMIC_OBJECT:.o=.d) $(USER_LDSO_OBJECT:.o=.d) $(USER_LIBC_STUB_OBJECT:.o=.d)
+	$(USER_SMOKE_DYNAMIC_OBJECT:.o=.d) $(USER_LDSO_ASM_OBJECT:.o=.d) \
+	$(USER_LDSO_C_OBJECTS:.o=.d) $(USER_LIBC_STUB_OBJECT:.o=.d)
 
 .PHONY: all kernel userspace userspace-startfiles userspace-ldso userspace-libc-stub userspace-sysroot userspace-smoke userspace-smoke-static userspace-smoke-dynamic image iso run run-debug test check-posix docs clean
 
@@ -144,10 +152,10 @@ userspace-smoke-static: userspace-sysroot $(USER_SMOKE_ELF)
 
 userspace-smoke-dynamic: userspace-sysroot $(USER_SMOKE_DYNAMIC_ELF)
 
-$(USER_LDSO_ELF): $(USER_LDSO_OBJECT)
+$(USER_LDSO_ELF): $(USER_LDSO_OBJECTS)
 	@mkdir -p $(dir $@)
 	$(CC) -nostdlib -shared -Wl,--build-id=none,-soname,ld-gnuos.so.1,-e,_start -o $@ \
-		$(USER_LDSO_OBJECT)
+		$(USER_LDSO_OBJECTS)
 
 $(USER_LIBC_SO): $(USER_LIBC_STUB_OBJECT)
 	@mkdir -p $(dir $@)
@@ -182,6 +190,10 @@ $(USER_SMOKE_DYNAMIC_OBJECT): $(USER_SMOKE_SOURCE) userspace-sysroot
 $(USER_LIBC_STUB_OBJECT): $(USER_LIBC_STUB_SOURCE)
 	@mkdir -p $(dir $@)
 	$(CC) $(USER_CFLAGS) -fPIC -MMD -MP -c $< -o $@
+
+$(BUILD_DIR)/userspace/libc/ldso/%.o: userspace/libc/ldso/%.c
+	@mkdir -p $(dir $@)
+	$(CC) $(USER_LDSO_CFLAGS) -MMD -MP -c $< -o $@
 
 test:
 	@echo "Tests are not wired yet. Add unit/integration targets in tests/."
