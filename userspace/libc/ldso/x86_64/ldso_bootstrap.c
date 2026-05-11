@@ -5,6 +5,7 @@
 #include <link.h>
 #include <pthread.h>
 #include <semaphore.h>
+#include <signal.h>
 
 #include "ldso_dlfcn.h"
 #include "ldso_elf.h"
@@ -21,7 +22,7 @@
 #define LDSO_LD_PRELOAD_KEY "LD_PRELOAD="
 #define LDSO_LD_PRELOAD_KEY_LEN 11U
 #define LDSO_PRELOAD_TOKEN_MAX 128U
-#define LDSO_STAGE0_BUILTIN_SYMBOL_COUNT 27U
+#define LDSO_STAGE0_BUILTIN_SYMBOL_COUNT 37U
 
 #define GNUOS_PTHREAD_ENOSYS 38
 #define GNUOS_PTHREAD_EINVAL 22
@@ -31,6 +32,7 @@
 #define GNUOS_SEM_EAGAIN 11
 #define GNUOS_SEM_EOVERFLOW 75
 #define GNUOS_SEM_VALUE_MAX 0x7FFFFFFFU
+#define GNUOS_SIGNAL_NSIG NSIG
 
 typedef struct {
     uint64_t a_type;
@@ -67,6 +69,8 @@ volatile ldso_stage0_state_t g_ldso_stage0_state;
 static ldso_dlfcn_builtin_symbol_t g_ldso_stage0_builtin_symbols[LDSO_STAGE0_BUILTIN_SYMBOL_COUNT];
 static uintptr_t g_ldso_stage0_tls_storage[64];
 static uintptr_t g_ldso_stage0_tls_base;
+static sigset_t g_signal_mask;
+static struct sigaction g_signal_actions[GNUOS_SIGNAL_NSIG];
 
 static const uint64_t *ldso_stack_skip_argv(const uint64_t *cursor, uint64_t argc)
 {
@@ -394,6 +398,140 @@ int sem_getvalue(sem_t *sem, int *sval)
     return 0;
 }
 
+static int gnuos_signal_valid(int signo)
+{
+    return signo > 0 && signo < GNUOS_SIGNAL_NSIG;
+}
+
+static sigset_t gnuos_signal_bit(int signo)
+{
+    return (sigset_t)1UL << (unsigned long)(signo - 1);
+}
+
+int sigemptyset(sigset_t *set)
+{
+    if (!set) {
+        return GNUOS_PTHREAD_EINVAL;
+    }
+
+    *set = 0UL;
+    return 0;
+}
+
+int sigfillset(sigset_t *set)
+{
+    if (!set) {
+        return GNUOS_PTHREAD_EINVAL;
+    }
+
+    *set = ~(sigset_t)0UL;
+    return 0;
+}
+
+int sigaddset(sigset_t *set, int signo)
+{
+    if (!set || !gnuos_signal_valid(signo)) {
+        return GNUOS_PTHREAD_EINVAL;
+    }
+
+    *set |= gnuos_signal_bit(signo);
+    return 0;
+}
+
+int sigdelset(sigset_t *set, int signo)
+{
+    if (!set || !gnuos_signal_valid(signo)) {
+        return GNUOS_PTHREAD_EINVAL;
+    }
+
+    *set &= ~(gnuos_signal_bit(signo));
+    return 0;
+}
+
+int sigismember(const sigset_t *set, int signo)
+{
+    if (!set || !gnuos_signal_valid(signo)) {
+        return -1;
+    }
+
+    return ((*set & gnuos_signal_bit(signo)) != 0UL) ? 1 : 0;
+}
+
+int sigaction(int signum, const struct sigaction *act, struct sigaction *oldact)
+{
+    if (!gnuos_signal_valid(signum) || signum == SIGKILL || signum == SIGSTOP) {
+        return GNUOS_PTHREAD_EINVAL;
+    }
+
+    if (oldact) {
+        *oldact = g_signal_actions[signum];
+    }
+
+    if (act) {
+        g_signal_actions[signum] = *act;
+    }
+
+    return 0;
+}
+
+int sigprocmask(int how, const sigset_t *set, sigset_t *oldset)
+{
+    if (oldset) {
+        *oldset = g_signal_mask;
+    }
+
+    if (!set) {
+        return 0;
+    }
+
+    switch (how) {
+    case SIG_BLOCK:
+        g_signal_mask |= *set;
+        return 0;
+    case SIG_UNBLOCK:
+        g_signal_mask &= ~(*set);
+        return 0;
+    case SIG_SETMASK:
+        g_signal_mask = *set;
+        return 0;
+    default:
+        return GNUOS_PTHREAD_EINVAL;
+    }
+}
+
+int kill(pid_t pid, int sig)
+{
+    (void)pid;
+    if (!gnuos_signal_valid(sig)) {
+        return GNUOS_PTHREAD_EINVAL;
+    }
+
+    return GNUOS_PTHREAD_ENOSYS;
+}
+
+int raise(int sig)
+{
+    return kill(0, sig);
+}
+
+sighandler_t signal(int signum, sighandler_t handler)
+{
+    struct sigaction act;
+    struct sigaction oldact;
+    int result;
+
+    act.sa_handler = handler;
+    act.sa_mask = 0UL;
+    act.sa_flags = 0;
+
+    result = sigaction(signum, &act, &oldact);
+    if (result != 0) {
+        return SIG_ERR;
+    }
+
+    return oldact.sa_handler;
+}
+
 void __gnuos_store_startup(unsigned long argc, char **argv, char **envp)
 {
     (void)argc;
@@ -541,6 +679,26 @@ static int ldso_stage0_register_builtin_symbols(void)
     g_ldso_stage0_builtin_symbols[25].address = (uint64_t)(uintptr_t)sem_post;
     g_ldso_stage0_builtin_symbols[26].name = "sem_getvalue";
     g_ldso_stage0_builtin_symbols[26].address = (uint64_t)(uintptr_t)sem_getvalue;
+    g_ldso_stage0_builtin_symbols[27].name = "sigemptyset";
+    g_ldso_stage0_builtin_symbols[27].address = (uint64_t)(uintptr_t)sigemptyset;
+    g_ldso_stage0_builtin_symbols[28].name = "sigfillset";
+    g_ldso_stage0_builtin_symbols[28].address = (uint64_t)(uintptr_t)sigfillset;
+    g_ldso_stage0_builtin_symbols[29].name = "sigaddset";
+    g_ldso_stage0_builtin_symbols[29].address = (uint64_t)(uintptr_t)sigaddset;
+    g_ldso_stage0_builtin_symbols[30].name = "sigdelset";
+    g_ldso_stage0_builtin_symbols[30].address = (uint64_t)(uintptr_t)sigdelset;
+    g_ldso_stage0_builtin_symbols[31].name = "sigismember";
+    g_ldso_stage0_builtin_symbols[31].address = (uint64_t)(uintptr_t)sigismember;
+    g_ldso_stage0_builtin_symbols[32].name = "sigaction";
+    g_ldso_stage0_builtin_symbols[32].address = (uint64_t)(uintptr_t)sigaction;
+    g_ldso_stage0_builtin_symbols[33].name = "sigprocmask";
+    g_ldso_stage0_builtin_symbols[33].address = (uint64_t)(uintptr_t)sigprocmask;
+    g_ldso_stage0_builtin_symbols[34].name = "kill";
+    g_ldso_stage0_builtin_symbols[34].address = (uint64_t)(uintptr_t)kill;
+    g_ldso_stage0_builtin_symbols[35].name = "raise";
+    g_ldso_stage0_builtin_symbols[35].address = (uint64_t)(uintptr_t)raise;
+    g_ldso_stage0_builtin_symbols[36].name = "signal";
+    g_ldso_stage0_builtin_symbols[36].address = (uint64_t)(uintptr_t)signal;
 
     registered_primary = ldso_dlfcn_register_builtin_object(
         "stage0-builtins",

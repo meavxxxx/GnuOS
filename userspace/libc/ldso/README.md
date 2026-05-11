@@ -32,6 +32,9 @@ Current status:
   (currently ENOSYS-style stubs, not `clone()`-backed threading yet).
 - `libc.so.6` and stage-0 resolver expose POSIX semaphore scaffolding APIs:
   `sem_init`, `sem_destroy`, `sem_wait`, `sem_trywait`, `sem_post`, `sem_getvalue`.
+- `libc.so.6` and stage-0 resolver expose signal scaffolding APIs:
+  `sigemptyset`, `sigfillset`, `sigaddset`, `sigdelset`, `sigismember`,
+  `sigaction`, `sigprocmask`, `kill`, `raise`, `signal`.
 - The sysroot installer places:
   - loader at `/lib/ld-gnuos.so.1`
   - stub libc at `/usr/lib/libc.so.6` (and `/usr/lib/libc.so` for link-time lookup)

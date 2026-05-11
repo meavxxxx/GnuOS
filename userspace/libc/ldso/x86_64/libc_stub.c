@@ -3,6 +3,7 @@
 #include <link.h>
 #include <pthread.h>
 #include <semaphore.h>
+#include <signal.h>
 
 #define GNUOS_AT_NULL 0UL
 #define GNUOS_AT_PHDR 3UL
@@ -23,6 +24,10 @@ static unsigned long g_tls_base_addr;
 #define GNUOS_SEM_EAGAIN 11
 #define GNUOS_SEM_EOVERFLOW 75
 #define GNUOS_SEM_VALUE_MAX 0x7FFFFFFFU
+#define GNUOS_SIGNAL_NSIG NSIG
+
+static sigset_t g_signal_mask;
+static struct sigaction g_signal_actions[GNUOS_SIGNAL_NSIG];
 
 void gnuos_libc_stub_touch(void)
 {
@@ -339,6 +344,140 @@ int sem_getvalue(sem_t *sem, int *sval)
 
     *sval = (int)sem->__value;
     return 0;
+}
+
+static int gnuos_signal_valid(int signo)
+{
+    return signo > 0 && signo < GNUOS_SIGNAL_NSIG;
+}
+
+static sigset_t gnuos_signal_bit(int signo)
+{
+    return (sigset_t)1UL << (unsigned long)(signo - 1);
+}
+
+int sigemptyset(sigset_t *set)
+{
+    if (!set) {
+        return GNUOS_PTHREAD_EINVAL;
+    }
+
+    *set = 0UL;
+    return 0;
+}
+
+int sigfillset(sigset_t *set)
+{
+    if (!set) {
+        return GNUOS_PTHREAD_EINVAL;
+    }
+
+    *set = ~(sigset_t)0UL;
+    return 0;
+}
+
+int sigaddset(sigset_t *set, int signo)
+{
+    if (!set || !gnuos_signal_valid(signo)) {
+        return GNUOS_PTHREAD_EINVAL;
+    }
+
+    *set |= gnuos_signal_bit(signo);
+    return 0;
+}
+
+int sigdelset(sigset_t *set, int signo)
+{
+    if (!set || !gnuos_signal_valid(signo)) {
+        return GNUOS_PTHREAD_EINVAL;
+    }
+
+    *set &= ~(gnuos_signal_bit(signo));
+    return 0;
+}
+
+int sigismember(const sigset_t *set, int signo)
+{
+    if (!set || !gnuos_signal_valid(signo)) {
+        return -1;
+    }
+
+    return ((*set & gnuos_signal_bit(signo)) != 0UL) ? 1 : 0;
+}
+
+int sigaction(int signum, const struct sigaction *act, struct sigaction *oldact)
+{
+    if (!gnuos_signal_valid(signum) || signum == SIGKILL || signum == SIGSTOP) {
+        return GNUOS_PTHREAD_EINVAL;
+    }
+
+    if (oldact) {
+        *oldact = g_signal_actions[signum];
+    }
+
+    if (act) {
+        g_signal_actions[signum] = *act;
+    }
+
+    return 0;
+}
+
+int sigprocmask(int how, const sigset_t *set, sigset_t *oldset)
+{
+    if (oldset) {
+        *oldset = g_signal_mask;
+    }
+
+    if (!set) {
+        return 0;
+    }
+
+    switch (how) {
+    case SIG_BLOCK:
+        g_signal_mask |= *set;
+        return 0;
+    case SIG_UNBLOCK:
+        g_signal_mask &= ~(*set);
+        return 0;
+    case SIG_SETMASK:
+        g_signal_mask = *set;
+        return 0;
+    default:
+        return GNUOS_PTHREAD_EINVAL;
+    }
+}
+
+int kill(pid_t pid, int sig)
+{
+    (void)pid;
+    if (!gnuos_signal_valid(sig)) {
+        return GNUOS_PTHREAD_EINVAL;
+    }
+
+    return GNUOS_PTHREAD_ENOSYS;
+}
+
+int raise(int sig)
+{
+    return kill(0, sig);
+}
+
+sighandler_t signal(int signum, sighandler_t handler)
+{
+    struct sigaction act;
+    struct sigaction oldact;
+    int result;
+
+    act.sa_handler = handler;
+    act.sa_mask = 0UL;
+    act.sa_flags = 0;
+
+    result = sigaction(signum, &act, &oldact);
+    if (result != 0) {
+        return SIG_ERR;
+    }
+
+    return oldact.sa_handler;
 }
 
 __attribute__((noreturn)) void _exit(int status)

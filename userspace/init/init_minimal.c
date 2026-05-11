@@ -6,6 +6,7 @@
 #include <link.h>
 #include <pthread.h>
 #include <semaphore.h>
+#include <signal.h>
 
 extern void gnuos_libc_stub_touch(void);
 
@@ -44,6 +45,11 @@ int main(int argc, char **argv, char **envp)
     size_t stack_size = 0;
     sem_t sem;
     int sem_value = 0;
+    sigset_t sigset;
+    sigset_t sigold;
+    struct sigaction sigact;
+    struct sigaction sigoldact;
+    int sig_member = 0;
 
     gnuos_libc_stub_touch();
     tls_base = __gnuos_get_tls_base();
@@ -70,6 +76,21 @@ int main(int argc, char **argv, char **envp)
     (void)sem_getvalue(&sem, &sem_value);
     (void)sem_value;
     (void)sem_destroy(&sem);
+    (void)sigemptyset(&sigset);
+    (void)sigaddset(&sigset, SIGINT);
+    (void)sigdelset(&sigset, SIGINT);
+    (void)sigfillset(&sigset);
+    sig_member = sigismember(&sigset, SIGTERM);
+    (void)sig_member;
+    (void)sigprocmask(SIG_BLOCK, &sigset, &sigold);
+    (void)sigprocmask(SIG_SETMASK, &sigold, 0);
+    sigact.sa_handler = SIG_IGN;
+    (void)sigemptyset(&sigact.sa_mask);
+    sigact.sa_flags = SA_RESTART;
+    (void)sigaction(SIGUSR1, &sigact, &sigoldact);
+    (void)signal(SIGUSR2, SIG_DFL);
+    (void)raise(SIGUSR1);
+    (void)kill(0, SIGTERM);
 #endif
     return 0;
 }
