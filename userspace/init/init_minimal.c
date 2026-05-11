@@ -64,6 +64,7 @@ int main(int argc, char **argv, char **envp)
     char inet_out[64];
     int file_fd = -1;
     struct stat file_stat;
+    mode_t old_umask = 0;
 
     gnuos_libc_stub_touch();
     tls_base = __gnuos_get_tls_base();
@@ -127,13 +128,17 @@ int main(int argc, char **argv, char **envp)
     }
     file_fd = open("./dummy", O_CREAT | O_RDWR | O_TRUNC, 0644);
     if (file_fd >= 0) {
+        old_umask = umask(022);
+        (void)old_umask;
         (void)write(file_fd, socket_buf, sizeof(socket_buf));
         (void)lseek(file_fd, 0, SEEK_SET);
         (void)read(file_fd, socket_buf, sizeof(socket_buf));
         (void)fstat(file_fd, &file_stat);
         (void)chmod("./dummy", 0644);
+        (void)fchmod(file_fd, 0644);
         (void)access("./dummy", F_OK);
         (void)close(file_fd);
+        (void)umask(old_umask);
     }
     (void)stat("./dummy", &file_stat);
     (void)mkdir("./tmp", 0755);

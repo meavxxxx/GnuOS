@@ -28,7 +28,7 @@
 #define LDSO_LD_PRELOAD_KEY "LD_PRELOAD="
 #define LDSO_LD_PRELOAD_KEY_LEN 11U
 #define LDSO_PRELOAD_TOKEN_MAX 128U
-#define LDSO_STAGE0_BUILTIN_SYMBOL_COUNT 63U
+#define LDSO_STAGE0_BUILTIN_SYMBOL_COUNT 65U
 
 #define GNUOS_PTHREAD_ENOSYS 38
 #define GNUOS_PTHREAD_EINVAL 22
@@ -1271,6 +1271,10 @@ static int ldso_stage0_register_builtin_symbols(void)
     g_ldso_stage0_builtin_symbols[61].address = (uint64_t)(uintptr_t)chmod;
     g_ldso_stage0_builtin_symbols[62].name = "mkdir";
     g_ldso_stage0_builtin_symbols[62].address = (uint64_t)(uintptr_t)mkdir;
+    g_ldso_stage0_builtin_symbols[63].name = "fchmod";
+    g_ldso_stage0_builtin_symbols[63].address = (uint64_t)(uintptr_t)fchmod;
+    g_ldso_stage0_builtin_symbols[64].name = "umask";
+    g_ldso_stage0_builtin_symbols[64].address = (uint64_t)(uintptr_t)umask;
 
     registered_primary = ldso_dlfcn_register_builtin_object(
         "stage0-builtins",
