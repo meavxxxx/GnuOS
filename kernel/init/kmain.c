@@ -16,6 +16,7 @@
 #include <gnuos/rcu.h>
 #include <gnuos/sched.h>
 #include <gnuos/serial.h>
+#include <gnuos/shm.h>
 #include <gnuos/spinlock.h>
 #include <gnuos/vmm.h>
 
@@ -350,6 +351,11 @@ void kmain(uint64_t boot_magic, uint64_t boot_info_addr)
     uint16_t ipc_received_capability = 0U;
     uint16_t ipc_received_capability_rights = 0U;
     capability_info_t ipc_received_capability_info;
+    int shm_demo_segment = -1;
+    void *shm_writer_address = NULL;
+    void *shm_reader_address = NULL;
+    uint64_t shm_writer_size = 0U;
+    uint64_t shm_reader_size = 0U;
     task_t *current_task = NULL;
     task_t *rcu_reader_task = NULL;
     task_t *rcu_updater_task = NULL;
@@ -416,6 +422,7 @@ void kmain(uint64_t boot_magic, uint64_t boot_info_addr)
     pci_init();
     dma_init();
     capability_init();
+    shm_init();
     ipc_init();
     pic_clear_mask(0U);
     pic_clear_mask(1U);
@@ -447,6 +454,7 @@ void kmain(uint64_t boot_magic, uint64_t boot_info_addr)
     if (ipc_boot_channel >= 0) {
         static const char ipc_boot_message[] = "ipc online";
         static const char ipc_capability_message[] = "capability online";
+        static const char shm_demo_message[] = "shared memory online";
 
         if (ipc_channel_send(
                 ipc_boot_channel,
@@ -502,6 +510,35 @@ void kmain(uint64_t boot_magic, uint64_t boot_info_addr)
                             (uint64_t)capability_count());
                     }
                 }
+            }
+        }
+
+        shm_demo_segment = shm_create("boot-shm", MM_PAGE_SIZE, 0U);
+        if (shm_demo_segment >= 0) {
+            if (shm_attach(shm_demo_segment, 11U, &shm_writer_address, &shm_writer_size) == 0 &&
+                shm_attach(shm_demo_segment, 22U, &shm_reader_address, &shm_reader_size) == 0 &&
+                shm_writer_address &&
+                shm_reader_address &&
+                shm_writer_size > 1U) {
+                uint64_t copy_len = (uint64_t)(sizeof(shm_demo_message) - 1U);
+                if (copy_len >= shm_writer_size) {
+                    copy_len = shm_writer_size - 1U;
+                }
+
+                for (uint64_t index = 0U; index < copy_len; index++) {
+                    ((char *)shm_writer_address)[index] = shm_demo_message[index];
+                }
+                ((char *)shm_writer_address)[copy_len] = '\0';
+
+                kprintf(
+                    "GNU OS: SHM demo segment=%u writer=11 reader=22 size=0x%X data='%s' segments=%u\n",
+                    (uint64_t)(uint16_t)shm_demo_segment,
+                    shm_reader_size,
+                    (const char *)shm_reader_address,
+                    (uint64_t)shm_segment_count());
+
+                (void)shm_detach(shm_demo_segment, 11U);
+                (void)shm_detach(shm_demo_segment, 22U);
             }
         }
     }
