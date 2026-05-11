@@ -250,7 +250,7 @@
 #### 2.3 Динамический компоновщик
 
 - [x] ELF загрузчик (парсинг PT_LOAD, PT_DYNAMIC, PT_GNU_RELRO)
-- [ ] Разрешение символов (PLT / GOT)
+- [x] Разрешение символов (PLT / GOT)
 - [ ] Порядок инициализации: `.init_array`, `DT_INIT`
 - [ ] `dlopen()` / `dlsym()` / `dlclose()`
 - [ ] LD_PRELOAD механизм
