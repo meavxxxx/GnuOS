@@ -20,6 +20,7 @@ require_tool clang-tidy
 
 echo "[static-analysis] generating compile database via bear..."
 make ARCH="$ARCH" TARGET="$TARGET" clean
+mkdir -p "$(dirname "$COMPILE_DB")"
 bear --output "$COMPILE_DB" -- make ARCH="$ARCH" TARGET="$TARGET" kernel userspace >/dev/null
 
 echo "[static-analysis] running cppcheck..."

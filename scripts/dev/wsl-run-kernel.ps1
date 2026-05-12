@@ -4,6 +4,7 @@ param(
     [string]$Arch = "x86_64",
     [switch]$SkipBuild,
     [switch]$Gui,
+    [switch]$Headless,
     [int]$TimeoutSec = 0
 )
 
@@ -33,7 +34,10 @@ $cdCmd = "cd '$repoLinuxPathSafe'"
 $buildCmd = "make ARCH=$Arch image"
 
 $qemuCmd = "qemu-system-x86_64 -cdrom '$kernelIsoPath' -serial stdio"
-if (-not $Gui) {
+if ($Gui -and $Headless) {
+    throw "Use either -Gui or -Headless, not both."
+}
+if ($Headless) {
     $qemuCmd += " -display none"
 }
 if ($TimeoutSec -gt 0) {

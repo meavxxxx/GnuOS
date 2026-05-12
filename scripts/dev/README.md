@@ -19,7 +19,8 @@
 # WSL
 .\scripts\dev\wsl-make.ps1 kernel
 .\scripts\dev\wsl-make.ps1 run
-.\scripts\dev\wsl-run-kernel.ps1
+.\scripts\dev\wsl-run-kernel.ps1          # GUI window by default
+.\scripts\dev\wsl-run-kernel.ps1 -Headless # serial-only mode
 
 # Docker
 .\scripts\dev\docker-make.ps1 -RebuildImage kernel
