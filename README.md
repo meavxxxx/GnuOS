@@ -861,7 +861,7 @@ docker run -it --rm -v $(pwd):/src gnuos-dev make ARCH=x86_64 all
 
 | Компонент | Лицензия |
 |---|---|
-| Ядро | **GPLv2-only** (как Linux) или **GPLv3** |
+| Ядро | **GPLv3** |
 | Системные библиотеки (glibc) | **LGPLv2.1+** |
 | GNU-инструменты (bash, coreutils) | **GPLv3+** |
 | Заголовочные файлы | **GPLv3+ with exception** |
