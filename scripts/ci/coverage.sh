@@ -24,6 +24,7 @@ gcc \
     -Wall \
     -Wextra \
     -Wpedantic \
+    -DLDSO_DLFCN_DISABLE_SHIMS \
     -Iuserspace/libc/ldso \
     -c userspace/libc/ldso/ldso_dlfcn.c \
     -o "$COVERAGE_DIR/ldso_dlfcn.o"
@@ -51,7 +52,7 @@ echo "[coverage] running unit test..."
 
 echo "[coverage] collecting lcov report..."
 lcov --capture --directory "$COVERAGE_DIR" --output-file "$COVERAGE_DIR/coverage.info"
-lcov --remove "$COVERAGE_DIR/coverage.info" "/usr/*" "tests/*" \
+lcov --ignore-errors unused --remove "$COVERAGE_DIR/coverage.info" "/usr/*" "tests/*" \
     --output-file "$COVERAGE_DIR/coverage.filtered.info"
 
 echo "[coverage] report: $COVERAGE_DIR/coverage.filtered.info"

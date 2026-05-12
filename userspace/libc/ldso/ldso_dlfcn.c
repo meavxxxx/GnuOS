@@ -49,15 +49,17 @@ static void ldso_error_clear(void)
 
 static void ldso_error_set(const char *message)
 {
-    uint64_t index;
+    uint64_t index = 0U;
 
     if (!message) {
         ldso_error_clear();
         return;
     }
 
-    for (index = 0U; index < (LDSO_DLFCN_MAX_ERROR_LEN - 1U) && message[index] != '\0'; index++) {
-        g_ldso_dlfcn_error[index] = message[index];
+    while (index < (LDSO_DLFCN_MAX_ERROR_LEN - 1U) && *message != '\0') {
+        g_ldso_dlfcn_error[index] = *message;
+        message++;
+        index++;
     }
     g_ldso_dlfcn_error[index] = '\0';
     g_ldso_dlfcn_error_ready = 1U;
@@ -397,6 +399,7 @@ char *ldso_dlerror(void)
     return g_ldso_dlfcn_error;
 }
 
+#ifndef LDSO_DLFCN_DISABLE_SHIMS
 void *dlopen(const char *file, int mode)
 {
     return ldso_dlopen(file, mode);
@@ -416,3 +419,4 @@ char *dlerror(void)
 {
     return ldso_dlerror();
 }
+#endif

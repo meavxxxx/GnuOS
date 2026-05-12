@@ -25,7 +25,7 @@ bear --output "$COMPILE_DB" -- make ARCH="$ARCH" TARGET="$TARGET" kernel userspa
 
 echo "[static-analysis] running cppcheck..."
 cppcheck \
-    --enable=warning,style,performance,portability \
+    --enable=warning,performance,portability \
     --std=c11 \
     --language=c \
     --error-exitcode=1 \

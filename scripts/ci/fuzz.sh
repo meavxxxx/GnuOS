@@ -24,6 +24,7 @@ clang \
     -Wall \
     -Wextra \
     -Wpedantic \
+    -DLDSO_DLFCN_DISABLE_SHIMS \
     -Iuserspace/libc/ldso \
     tests/fuzz/fuzz_ldso_dlfcn.c \
     userspace/libc/ldso/ldso_dlfcn.c \
