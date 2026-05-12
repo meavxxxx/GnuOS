@@ -1,5 +1,8 @@
 blank_issues_enabled: false
 contact_links:
+  - name: GNU OS Documentation Hub
+    url: https://github.com/meavxxxx/TempOS/blob/main/docs/README.md
+    about: Start here for architecture, process, setup, and contributor docs.
   - name: GNU OS Roadmap
     url: https://github.com/meavxxxx/TempOS/blob/main/README.md
     about: Validate scope and order against the roadmap before opening an issue.

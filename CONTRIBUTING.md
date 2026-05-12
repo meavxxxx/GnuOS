@@ -2,6 +2,15 @@
 
 Thanks for helping build GNU OS.
 
+## Repository navigation
+
+- Project roadmap and delivery status: [`README.md`](README.md)
+- Documentation index: [`docs/README.md`](docs/README.md)
+- Automation/scripts index: [`scripts/README.md`](scripts/README.md)
+- Kernel layout: [`kernel/README.md`](kernel/README.md)
+- Userspace layout: [`userspace/README.md`](userspace/README.md)
+- Test suite layout: [`tests/README.md`](tests/README.md)
+
 ## Development flow
 
 1. Create a feature branch from `main`.
