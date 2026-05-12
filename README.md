@@ -35,3 +35,16 @@ make ARCH=x86_64 run
 
 GNU OS is distributed under GPLv3 for project code unless a subcomponent
 specifies a compatible license in its own directory.
+
+---
+
+<div align="center">
+
+**GNU OS — свободная операционная система для свободных людей.**  
+"Free as in freedom." — Richard M. Stallman
+
+[![License: GPL v3](https://img.shields.io/badge/License-GPLv3-blue.svg)](https://www.gnu.org/licenses/gpl-3.0)
+[![POSIX Compliant](https://img.shields.io/badge/POSIX-1003.1--2017-green.svg)](https://pubs.opengroup.org/onlinepubs/9699919799/)
+[![GNU Project](https://img.shields.io/badge/GNU-Project-red.svg)](https://www.gnu.org/)
+
+</div>
