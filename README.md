@@ -142,7 +142,7 @@
 - [x] Переход в 64-битный защищённый режим (Long Mode)
 - [x] Базовая инициализация стека
 - [x] Передача управления ядру с картой памяти
-- [ ] Поддержка UEFI (UEFI stub loader)
+- [x] Поддержка UEFI (UEFI stub loader)
 - [x] Минимальный UEFI stub scaffolding (`BOOTX64.EFI`, OVMF run script, prototype handoff path в `kmain`)
 - [ ] Настройка framebuffer для раннего вывода (VESA / GOP)
 

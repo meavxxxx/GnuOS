@@ -77,6 +77,26 @@ typedef EFI_STATUS(EFIAPI *EFI_ALLOCATE_PAGES)(
     UINTN pages,
     EFI_PHYSICAL_ADDRESS *memory);
 typedef EFI_STATUS(EFIAPI *EFI_FREE_PAGES)(EFI_PHYSICAL_ADDRESS memory, UINTN pages);
+typedef struct {
+    uint32_t Type;
+    uint32_t Pad;
+    EFI_PHYSICAL_ADDRESS PhysicalStart;
+    EFI_PHYSICAL_ADDRESS VirtualStart;
+    uint64_t NumberOfPages;
+    uint64_t Attribute;
+} EFI_MEMORY_DESCRIPTOR;
+typedef EFI_STATUS(EFIAPI *EFI_GET_MEMORY_MAP)(
+    UINTN *memory_map_size,
+    EFI_MEMORY_DESCRIPTOR *memory_map,
+    UINTN *map_key,
+    UINTN *descriptor_size,
+    uint32_t *descriptor_version);
+typedef EFI_STATUS(EFIAPI *EFI_ALLOCATE_POOL)(
+    EFI_MEMORY_TYPE pool_type,
+    UINTN size,
+    void **buffer);
+typedef EFI_STATUS(EFIAPI *EFI_FREE_POOL)(void *buffer);
+typedef EFI_STATUS(EFIAPI *EFI_EXIT_BOOT_SERVICES)(EFI_HANDLE image_handle, UINTN map_key);
 
 struct EFI_BOOT_SERVICES {
     EFI_TABLE_HEADER Hdr;
@@ -84,9 +104,9 @@ struct EFI_BOOT_SERVICES {
     void *RestoreTPL;
     EFI_ALLOCATE_PAGES AllocatePages;
     EFI_FREE_PAGES FreePages;
-    void *GetMemoryMap;
-    void *AllocatePool;
-    void *FreePool;
+    EFI_GET_MEMORY_MAP GetMemoryMap;
+    EFI_ALLOCATE_POOL AllocatePool;
+    EFI_FREE_POOL FreePool;
     void *CreateEvent;
     void *SetTimer;
     void *WaitForEvent;
@@ -106,7 +126,7 @@ struct EFI_BOOT_SERVICES {
     void *StartImage;
     void *Exit;
     void *UnloadImage;
-    void *ExitBootServices;
+    EFI_EXIT_BOOT_SERVICES ExitBootServices;
     void *GetNextMonotonicCount;
     void *Stall;
     void *SetWatchdogTimer;

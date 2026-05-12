@@ -58,6 +58,18 @@ typedef struct {
 #define MULTIBOOT2_TAG_TYPE_END 0U
 #define MULTIBOOT2_TAG_TYPE_MMAP 6U
 #define MULTIBOOT2_MEMORY_AVAILABLE 1U
+#define MULTIBOOT2_MEMORY_RESERVED 2U
+#define MULTIBOOT2_MEMORY_ACPI_RECLAIMABLE 3U
+#define MULTIBOOT2_MEMORY_ACPI_NVS 4U
+#define MULTIBOOT2_MEMORY_BADRAM 5U
+
+#define EFI_INVALID_PARAMETER 0x8000000000000002ULL
+#define EFI_BUFFER_TOO_SMALL 0x8000000000000005ULL
+#define EFI_PAGE_SIZE 4096ULL
+
+#define GNUOS_EFI_MMAP_SLOP_DESCRIPTORS 8U
+#define GNUOS_EFI_EXIT_BOOT_SERVICES_RETRIES 4U
+#define GNUOS_EFI_MULTIBOOT_INFO_PAGES 16U
 
 typedef struct {
     uint32_t total_size;
@@ -81,18 +93,15 @@ typedef struct {
     uint32_t size;
     uint32_t entry_size;
     uint32_t entry_version;
-    multiboot2_mmap_entry_t entries[1];
 } __attribute__((packed)) multiboot2_mmap_tag_t;
 
 typedef struct {
-    multiboot2_info_header_t header;
-    multiboot2_mmap_tag_t mmap_tag;
-    multiboot2_tag_t end_tag;
-} __attribute__((packed)) multiboot2_stub_info_t;
+    EFI_PHYSICAL_ADDRESS base;
+    UINTN size_bytes;
+} gnuos_efi_buffer_t;
 
 extern const unsigned char gnuos_kernel_blob_start[];
 extern const unsigned char gnuos_kernel_blob_end[];
-static multiboot2_stub_info_t g_multiboot2_stub_info;
 
 static void efi_puts(EFI_SYSTEM_TABLE *system_table, const CHAR16 *text)
 {
@@ -150,35 +159,210 @@ static uint64_t gnuos_align_up(uint64_t value, uint64_t alignment)
     return (value + (alignment - 1ULL)) & ~(alignment - 1ULL);
 }
 
-static uint32_t gnuos_align_up32(uint32_t value, uint32_t alignment)
+static uint32_t gnuos_efi_memory_type_to_multiboot(uint32_t efi_memory_type)
 {
-    return (value + (alignment - 1U)) & ~(alignment - 1U);
+    switch (efi_memory_type) {
+        case EfiLoaderCode:
+        case EfiLoaderData:
+        case EfiBootServicesCode:
+        case EfiBootServicesData:
+        case EfiConventionalMemory:
+            return MULTIBOOT2_MEMORY_AVAILABLE;
+        case EfiACPIReclaimMemory:
+            return MULTIBOOT2_MEMORY_ACPI_RECLAIMABLE;
+        case EfiACPIMemoryNVS:
+            return MULTIBOOT2_MEMORY_ACPI_NVS;
+        case EfiUnusableMemory:
+            return MULTIBOOT2_MEMORY_BADRAM;
+        default:
+            return MULTIBOOT2_MEMORY_RESERVED;
+    }
 }
 
-static uint64_t gnuos_build_multiboot2_stub_info(void)
+static EFI_STATUS gnuos_allocate_multiboot2_buffer(
+    EFI_SYSTEM_TABLE *system_table,
+    gnuos_efi_buffer_t *buffer_out)
 {
-    uint32_t mmap_tag_size = (uint32_t)sizeof(multiboot2_mmap_tag_t);
-    uint32_t total_size = 0U;
+    EFI_PHYSICAL_ADDRESS buffer_base = 0U;
+    UINTN buffer_size = 0U;
+    EFI_STATUS status = EFI_SUCCESS;
 
-    g_multiboot2_stub_info.mmap_tag.type = MULTIBOOT2_TAG_TYPE_MMAP;
-    g_multiboot2_stub_info.mmap_tag.size = mmap_tag_size;
-    g_multiboot2_stub_info.mmap_tag.entry_size = (uint32_t)sizeof(multiboot2_mmap_entry_t);
-    g_multiboot2_stub_info.mmap_tag.entry_version = 0U;
-    g_multiboot2_stub_info.mmap_tag.entries[0].addr = 0x00100000ULL;
-    g_multiboot2_stub_info.mmap_tag.entries[0].len = 64ULL * 1024ULL * 1024ULL;
-    g_multiboot2_stub_info.mmap_tag.entries[0].type = MULTIBOOT2_MEMORY_AVAILABLE;
-    g_multiboot2_stub_info.mmap_tag.entries[0].reserved = 0U;
+    if (!system_table || !system_table->BootServices || !system_table->BootServices->AllocatePages ||
+        !buffer_out) {
+        return 1ULL;
+    }
 
-    g_multiboot2_stub_info.end_tag.type = MULTIBOOT2_TAG_TYPE_END;
-    g_multiboot2_stub_info.end_tag.size = (uint32_t)sizeof(multiboot2_tag_t);
+    status = system_table->BootServices->AllocatePages(
+        AllocateAnyPages,
+        EfiLoaderData,
+        GNUOS_EFI_MULTIBOOT_INFO_PAGES,
+        &buffer_base);
+    if (status != EFI_SUCCESS) {
+        return status;
+    }
 
-    total_size = (uint32_t)sizeof(multiboot2_info_header_t);
-    total_size += gnuos_align_up32(mmap_tag_size, 8U);
-    total_size += gnuos_align_up32((uint32_t)sizeof(multiboot2_tag_t), 8U);
+    buffer_size = (UINTN)(GNUOS_EFI_MULTIBOOT_INFO_PAGES * EFI_PAGE_SIZE);
+    buffer_out->base = buffer_base;
+    buffer_out->size_bytes = buffer_size;
+    return EFI_SUCCESS;
+}
 
-    g_multiboot2_stub_info.header.total_size = total_size;
-    g_multiboot2_stub_info.header.reserved = 0U;
-    return (uint64_t)(UINTN)&g_multiboot2_stub_info;
+static EFI_STATUS gnuos_fetch_memory_map(
+    EFI_SYSTEM_TABLE *system_table,
+    EFI_MEMORY_DESCRIPTOR **memory_map_out,
+    UINTN *memory_map_size_out,
+    UINTN *map_key_out,
+    UINTN *descriptor_size_out)
+{
+    EFI_BOOT_SERVICES *boot_services = 0;
+    EFI_STATUS status = EFI_SUCCESS;
+    EFI_MEMORY_DESCRIPTOR *memory_map = 0;
+    UINTN memory_map_size = 0U;
+    UINTN map_key = 0U;
+    UINTN descriptor_size = 0U;
+    uint32_t descriptor_version = 0U;
+    uint8_t attempt;
+
+    if (!system_table || !memory_map_out || !memory_map_size_out || !map_key_out ||
+        !descriptor_size_out) {
+        return 2ULL;
+    }
+
+    boot_services = system_table->BootServices;
+    if (!boot_services || !boot_services->GetMemoryMap || !boot_services->AllocatePool ||
+        !boot_services->FreePool) {
+        return 3ULL;
+    }
+
+    status = boot_services->GetMemoryMap(
+        &memory_map_size,
+        0,
+        &map_key,
+        &descriptor_size,
+        &descriptor_version);
+    if (status != EFI_BUFFER_TOO_SMALL || descriptor_size == 0U) {
+        return 4ULL;
+    }
+
+    memory_map_size += descriptor_size * GNUOS_EFI_MMAP_SLOP_DESCRIPTORS;
+    for (attempt = 0U; attempt < GNUOS_EFI_EXIT_BOOT_SERVICES_RETRIES; attempt++) {
+        status = boot_services->AllocatePool(
+            EfiLoaderData,
+            memory_map_size,
+            (void **)&memory_map);
+        if (status != EFI_SUCCESS || !memory_map) {
+            return (status != EFI_SUCCESS) ? status : 5ULL;
+        }
+
+        status = boot_services->GetMemoryMap(
+            &memory_map_size,
+            memory_map,
+            &map_key,
+            &descriptor_size,
+            &descriptor_version);
+        if (status == EFI_SUCCESS) {
+            *memory_map_out = memory_map;
+            *memory_map_size_out = memory_map_size;
+            *map_key_out = map_key;
+            *descriptor_size_out = descriptor_size;
+            return EFI_SUCCESS;
+        }
+
+        (void)boot_services->FreePool(memory_map);
+        memory_map = 0;
+        if (status != EFI_BUFFER_TOO_SMALL || descriptor_size == 0U) {
+            return status;
+        }
+        memory_map_size += descriptor_size * GNUOS_EFI_MMAP_SLOP_DESCRIPTORS;
+    }
+
+    return status;
+}
+
+static EFI_STATUS gnuos_build_multiboot2_info(
+    const EFI_MEMORY_DESCRIPTOR *memory_map,
+    UINTN memory_map_size,
+    UINTN descriptor_size,
+    const gnuos_efi_buffer_t *boot_info_buffer,
+    uint64_t *boot_info_addr_out)
+{
+    uint64_t descriptor_count;
+    uint64_t mmap_tag_size;
+    uint64_t total_size;
+    multiboot2_info_header_t *header;
+    multiboot2_mmap_tag_t *mmap_tag;
+    multiboot2_mmap_entry_t *entries;
+    multiboot2_tag_t *end_tag;
+    uint64_t index;
+    unsigned char *boot_info_base;
+
+    if (!memory_map || descriptor_size == 0U || !boot_info_buffer || !boot_info_addr_out) {
+        return 6ULL;
+    }
+
+    descriptor_count = (uint64_t)(memory_map_size / descriptor_size);
+    if (descriptor_count == 0ULL) {
+        return 7ULL;
+    }
+
+    mmap_tag_size = (uint64_t)sizeof(multiboot2_mmap_tag_t) +
+        (descriptor_count * (uint64_t)sizeof(multiboot2_mmap_entry_t));
+    if (mmap_tag_size > 0xFFFFFFFFULL) {
+        return 8ULL;
+    }
+
+    total_size = (uint64_t)sizeof(multiboot2_info_header_t);
+    total_size += gnuos_align_up(mmap_tag_size, 8ULL);
+    total_size += gnuos_align_up((uint64_t)sizeof(multiboot2_tag_t), 8ULL);
+    if (total_size > 0xFFFFFFFFULL ||
+        total_size > (uint64_t)boot_info_buffer->size_bytes) {
+        return 8ULL;
+    }
+
+    boot_info_base = (unsigned char *)(UINTN)boot_info_buffer->base;
+    (void)gnuos_memset(boot_info_base, 0, boot_info_buffer->size_bytes);
+
+    header = (multiboot2_info_header_t *)(void *)boot_info_base;
+    mmap_tag = (multiboot2_mmap_tag_t *)(void *)(boot_info_base + sizeof(multiboot2_info_header_t));
+    entries = (multiboot2_mmap_entry_t *)(void *)((unsigned char *)mmap_tag + sizeof(multiboot2_mmap_tag_t));
+
+    for (index = 0ULL; index < descriptor_count; index++) {
+        const EFI_MEMORY_DESCRIPTOR *descriptor =
+            (const EFI_MEMORY_DESCRIPTOR *)(const void
+                *)((const unsigned char *)memory_map + (index * descriptor_size));
+        entries[index].addr = descriptor->PhysicalStart;
+        entries[index].len = descriptor->NumberOfPages * EFI_PAGE_SIZE;
+        entries[index].type = gnuos_efi_memory_type_to_multiboot(descriptor->Type);
+        entries[index].reserved = 0U;
+    }
+
+    mmap_tag->type = MULTIBOOT2_TAG_TYPE_MMAP;
+    mmap_tag->size = (uint32_t)mmap_tag_size;
+    mmap_tag->entry_size = (uint32_t)sizeof(multiboot2_mmap_entry_t);
+    mmap_tag->entry_version = 0U;
+
+    end_tag = (multiboot2_tag_t *)(void
+            *)(boot_info_base + sizeof(multiboot2_info_header_t) +
+               (UINTN)gnuos_align_up((uint64_t)mmap_tag->size, 8ULL));
+    end_tag->type = MULTIBOOT2_TAG_TYPE_END;
+    end_tag->size = (uint32_t)sizeof(multiboot2_tag_t);
+
+    header->total_size = (uint32_t)total_size;
+    header->reserved = 0U;
+    *boot_info_addr_out = (uint64_t)(UINTN)boot_info_base;
+    return EFI_SUCCESS;
+}
+
+static EFI_STATUS gnuos_exit_boot_services(
+    EFI_HANDLE image_handle,
+    EFI_SYSTEM_TABLE *system_table,
+    UINTN map_key)
+{
+    if (!system_table || !system_table->BootServices || !system_table->BootServices->ExitBootServices) {
+        return 9ULL;
+    }
+
+    return system_table->BootServices->ExitBootServices(image_handle, map_key);
 }
 
 static EFI_STATUS gnuos_load_kernel_segments(
@@ -325,11 +509,16 @@ EFI_STATUS EFIAPI efi_main(EFI_HANDLE image_handle, EFI_SYSTEM_TABLE *system_tab
     const unsigned char *kernel_blob = gnuos_kernel_blob_start;
     UINTN kernel_size = (UINTN)(gnuos_kernel_blob_end - gnuos_kernel_blob_start);
     const elf64_ehdr_t *ehdr;
-    EFI_STATUS load_status;
+    EFI_STATUS status = EFI_SUCCESS;
+    EFI_MEMORY_DESCRIPTOR *memory_map = 0;
+    UINTN memory_map_size = 0U;
+    UINTN map_key = 0U;
+    UINTN descriptor_size = 0U;
+    gnuos_efi_buffer_t multiboot_info_buffer = {0};
     gnuos_kernel_main_t kmain_entry;
-    uint64_t multiboot_info_addr;
+    uint64_t multiboot_info_addr = 0U;
+    uint8_t attempt = 0U;
 
-    (void)image_handle;
     efi_puts(system_table, banner);
     efi_puts(system_table, loading);
 
@@ -349,10 +538,10 @@ EFI_STATUS EFIAPI efi_main(EFI_HANDLE image_handle, EFI_SYSTEM_TABLE *system_tab
         return 3ULL;
     }
 
-    load_status = gnuos_load_kernel_segments(system_table, kernel_blob, kernel_size, ehdr);
-    if (load_status != EFI_SUCCESS) {
+    status = gnuos_load_kernel_segments(system_table, kernel_blob, kernel_size, ehdr);
+    if (status != EFI_SUCCESS) {
         efi_puts(system_table, failed);
-        return load_status;
+        return status;
     }
 
     kmain_entry = gnuos_find_kmain_symbol(kernel_blob, kernel_size);
@@ -361,15 +550,59 @@ EFI_STATUS EFIAPI efi_main(EFI_HANDLE image_handle, EFI_SYSTEM_TABLE *system_tab
         return 5ULL;
     }
 
-    multiboot_info_addr = gnuos_build_multiboot2_stub_info();
-    efi_puts(system_table, handoff);
-    kmain_entry(MULTIBOOT2_BOOTLOADER_MAGIC, multiboot_info_addr);
+    status = gnuos_allocate_multiboot2_buffer(system_table, &multiboot_info_buffer);
+    if (status != EFI_SUCCESS) {
+        efi_puts(system_table, failed);
+        return status;
+    }
 
-    static const CHAR16 returned[] = {
-        'G', 'N', 'U', ' ', 'O', 'S', ':', ' ',
-        'k', 'm', 'a', 'i', 'n', ' ', 'r', 'e', 't', 'u', 'r', 'n', 'e', 'd', '.',
-        '\r', '\n', 0
-    };
-    efi_puts(system_table, returned);
+    efi_puts(system_table, handoff);
+    for (attempt = 0U; attempt < GNUOS_EFI_EXIT_BOOT_SERVICES_RETRIES; attempt++) {
+        if (memory_map && system_table && system_table->BootServices &&
+            system_table->BootServices->FreePool) {
+            (void)system_table->BootServices->FreePool(memory_map);
+            memory_map = 0;
+        }
+
+        status = gnuos_fetch_memory_map(
+            system_table,
+            &memory_map,
+            &memory_map_size,
+            &map_key,
+            &descriptor_size);
+        if (status != EFI_SUCCESS) {
+            efi_puts(system_table, failed);
+            return status;
+        }
+
+        status = gnuos_build_multiboot2_info(
+            memory_map,
+            memory_map_size,
+            descriptor_size,
+            &multiboot_info_buffer,
+            &multiboot_info_addr);
+        if (status != EFI_SUCCESS) {
+            efi_puts(system_table, failed);
+            return status;
+        }
+
+        status = gnuos_exit_boot_services(image_handle, system_table, map_key);
+        if (status == EFI_SUCCESS) {
+            break;
+        }
+        if (status != EFI_INVALID_PARAMETER) {
+            efi_puts(system_table, failed);
+            return status;
+        }
+    }
+    if (status != EFI_SUCCESS) {
+        efi_puts(system_table, failed);
+        return status;
+    }
+
+    kmain_entry(MULTIBOOT2_BOOTLOADER_MAGIC, multiboot_info_addr);
+    for (;;) {
+        __asm__ volatile("hlt");
+    }
     return EFI_SUCCESS;
 }
