@@ -11,19 +11,20 @@
 - `-Backend wsl|docker|both`
 - `-Distro Ubuntu` (default distro for WSL)
 - `-InstallCrossToolchain` (builds `x86_64-elf-*` toolchain in WSL)
-- `-SkipBootstrapBuild` (skip initial `make kernel` and `make image`)
+- `-SkipBootstrapBuild` (skip initial full build: `kernel + userspace + uefi-stub + image`)
 
 ## Daily usage
 
 ```powershell
 # WSL
-.\scripts\dev\wsl-make.ps1 kernel
-.\scripts\dev\wsl-make.ps1 run
+.\scripts\dev\wsl-make.ps1                # full build by default
+.\scripts\dev\wsl-make.ps1 kernel         # single target
+.\scripts\dev\wsl-make.ps1 run            # make run
 .\scripts\dev\wsl-run-kernel.ps1          # GUI window by default
 .\scripts\dev\wsl-run-kernel.ps1 -Headless # serial-only mode
 
 # Docker
-.\scripts\dev\docker-make.ps1 -RebuildImage kernel
+.\scripts\dev\docker-make.ps1 -RebuildImage
 .\scripts\dev\docker-make.ps1 run
 
 # UEFI stub

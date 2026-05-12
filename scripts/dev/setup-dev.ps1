@@ -120,8 +120,8 @@ function Setup-Wsl {
             ""
         }
 
-        Write-Step "Running bootstrap build in WSL (make kernel + make image)."
-        Invoke-WslBash -DistroName $DistroName -Command "cd '$repoLinuxPath' && $pathPrefix make ARCH=x86_64 kernel && make ARCH=x86_64 image"
+        Write-Step "Running bootstrap build in WSL (kernel + userspace + uefi-stub + image)."
+        Invoke-WslBash -DistroName $DistroName -Command "cd '$repoLinuxPath' && $pathPrefix make ARCH=x86_64 full"
     }
 
     Write-Step "WSL setup complete."
@@ -139,15 +139,10 @@ function Setup-Docker {
     }
 
     if ($RunBootstrapBuild) {
-        Write-Step "Running bootstrap build in Docker (make kernel + make image)."
-        & docker run --rm -v "${RepoRoot}:/src" -w /src $DockerImage make ARCH=x86_64 TARGET=x86_64-linux-gnu kernel
+        Write-Step "Running bootstrap build in Docker (kernel + userspace + uefi-stub + image)."
+        & docker run --rm -v "${RepoRoot}:/src" -w /src $DockerImage make ARCH=x86_64 TARGET=x86_64-linux-gnu full
         if ($LASTEXITCODE -ne 0) {
-            throw "Docker kernel build failed."
-        }
-
-        & docker run --rm -v "${RepoRoot}:/src" -w /src $DockerImage make ARCH=x86_64 TARGET=x86_64-linux-gnu image
-        if ($LASTEXITCODE -ne 0) {
-            throw "Docker image build failed."
+            throw "Docker bootstrap build failed."
         }
     }
 
@@ -185,7 +180,7 @@ if ($hadErrors) {
 Write-Step "All requested setup steps completed."
 Write-Host ""
 Write-Host "Next commands:"
-Write-Host "  WSL build:    .\\scripts\\dev\\wsl-make.ps1 kernel"
-Write-Host "  WSL run:      .\\scripts\\dev\\wsl-make.ps1 run"
-Write-Host "  Docker build: .\\scripts\\dev\\docker-make.ps1 kernel"
+Write-Host "  WSL build:    .\\scripts\\dev\\wsl-make.ps1"
+Write-Host "  WSL run:      .\\scripts\\dev\\wsl-run-kernel.ps1"
+Write-Host "  Docker build: .\\scripts\\dev\\docker-make.ps1"
 Write-Host "  Docker run:   .\\scripts\\dev\\docker-make.ps1 run"

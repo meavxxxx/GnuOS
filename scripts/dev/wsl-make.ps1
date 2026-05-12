@@ -1,7 +1,8 @@
 [CmdletBinding()]
 param(
-    [string]$Target = "kernel",
-    [string]$Distro = "Ubuntu"
+    [string]$Target = "full",
+    [string]$Distro = "Ubuntu",
+    [string]$Arch = "x86_64"
 )
 
 Set-StrictMode -Version Latest
@@ -21,8 +22,14 @@ $drive = $RepoRoot.Substring(0, 1).ToLowerInvariant()
 $rest = $RepoRoot.Substring(2).Replace('\', '/')
 $repoLinuxPath = "/mnt/$drive$rest"
 
-$cmd = "source ~/.profile >/dev/null 2>&1 || true; cd '$repoLinuxPath' && make ARCH=x86_64 $Target"
+$makeArgs = switch ($Target.ToLowerInvariant()) {
+    "full" { "full" }
+    "bootstrap" { "full" }
+    default { $Target }
+}
+
+$cmd = "source ~/.profile >/dev/null 2>&1 || true; cd '$repoLinuxPath' && make ARCH=$Arch $makeArgs"
 & wsl.exe -d $Distro -- bash -lc $cmd
 if ($LASTEXITCODE -ne 0) {
-    throw "WSL make target failed: $Target"
+    throw "WSL make target failed: $Target (ARCH=$Arch)"
 }

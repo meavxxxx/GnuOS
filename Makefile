@@ -111,9 +111,11 @@ USER_DEPS := $(USER_STARTFILES_OBJECTS:.o=.d) $(USER_SMOKE_OBJECT:.o=.d) \
 	$(USER_SMOKE_DYNAMIC_OBJECT:.o=.d) $(USER_LDSO_ASM_OBJECT:.o=.d) \
 	$(USER_LDSO_C_OBJECTS:.o=.d) $(USER_LIBC_STUB_OBJECT:.o=.d)
 
-.PHONY: all kernel userspace userspace-startfiles userspace-ldso userspace-libc-stub userspace-sysroot userspace-smoke userspace-smoke-static userspace-smoke-dynamic uefi-stub image iso run run-debug test check-posix docs clean
+.PHONY: all full kernel userspace userspace-startfiles userspace-ldso userspace-libc-stub userspace-sysroot userspace-smoke userspace-smoke-static userspace-smoke-dynamic uefi-stub image iso run run-debug test check-posix docs clean
 
 all: kernel
+
+full: kernel userspace uefi-stub image
 
 kernel: $(KERNEL_ELF)
 

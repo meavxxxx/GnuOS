@@ -1,6 +1,6 @@
 [CmdletBinding()]
 param(
-    [string]$Target = "kernel",
+    [string]$Target = "full",
     [switch]$RebuildImage
 )
 
@@ -25,7 +25,13 @@ if ($RebuildImage -or -not $imageExists) {
     }
 }
 
-& docker run --rm -it -v "${RepoRoot}:/src" -w /src $ImageName make ARCH=x86_64 TARGET=x86_64-linux-gnu $Target
+switch ($Target.ToLowerInvariant()) {
+    "full" { $makeArgs = "full" }
+    "bootstrap" { $makeArgs = "full" }
+    default { $makeArgs = $Target }
+}
+
+& docker run --rm -it -v "${RepoRoot}:/src" -w /src $ImageName bash -lc "make ARCH=x86_64 TARGET=x86_64-linux-gnu $makeArgs"
 if ($LASTEXITCODE -ne 0) {
     throw "Docker make target failed: $Target"
 }

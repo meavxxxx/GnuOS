@@ -13,6 +13,7 @@ $ErrorActionPreference = "Stop"
 
 $ScriptDir = Split-Path -Parent $MyInvocation.MyCommand.Path
 $RepoRoot = (Resolve-Path (Join-Path $ScriptDir "..\\..")).Path
+$buildTargets = "full"
 
 if (-not (Get-Command wsl.exe -ErrorAction SilentlyContinue)) {
     throw "wsl.exe is not available. Install WSL first."
@@ -24,19 +25,40 @@ if ($RepoRoot.Length -lt 3 -or $RepoRoot[1] -ne ':') {
 $drive = $RepoRoot.Substring(0, 1).ToLowerInvariant()
 $rest = $RepoRoot.Substring(2).Replace('\', '/')
 $repoLinuxPath = "/mnt/$drive$rest"
-
-# Path from wslpath is expected without single quotes in this workspace.
 $repoLinuxPathSafe = $repoLinuxPath
-$kernelIsoPath = "build/$Arch/gnuos-$Arch.iso"
 
-$setupCmd = "source ~/.profile >/dev/null 2>&1 || true"
-$cdCmd = "cd '$repoLinuxPathSafe'"
-$buildCmd = "make ARCH=$Arch image"
-
-$qemuCmd = "qemu-system-x86_64 -cdrom '$kernelIsoPath' -serial stdio"
 if ($Gui -and $Headless) {
     throw "Use either -Gui or -Headless, not both."
 }
+
+function Invoke-WslBash {
+    param(
+        [string]$DistroName,
+        [string]$Command
+    )
+
+    & wsl.exe -d $DistroName -- bash -lc $Command
+}
+
+$kernelIsoPath = "build/$Arch/gnuos-$Arch.iso"
+if (-not $SkipBuild) {
+    $primaryBuildCmd = "source ~/.profile >/dev/null 2>&1 || true; cd '$repoLinuxPathSafe' && make ARCH=$Arch $buildTargets"
+    Invoke-WslBash -DistroName $Distro -Command $primaryBuildCmd
+    $primaryExitCode = $LASTEXITCODE
+    if ($primaryExitCode -ne 0) {
+        Write-Warning "Primary build failed (exit code: $primaryExitCode). Retrying full build in WSL tmpfs."
+        $tmpBuildDir = "/tmp/gnuos-build/$Arch"
+        $fallbackBuildCmd = "source ~/.profile >/dev/null 2>&1 || true; cd '$repoLinuxPathSafe' && rm -rf '$tmpBuildDir' && make ARCH=$Arch BUILD_DIR=$tmpBuildDir $buildTargets"
+        Invoke-WslBash -DistroName $Distro -Command $fallbackBuildCmd
+        $fallbackExitCode = $LASTEXITCODE
+        if ($fallbackExitCode -ne 0) {
+            throw "WSL kernel build failed (primary exit: $primaryExitCode, fallback exit: $fallbackExitCode)."
+        }
+        $kernelIsoPath = "$tmpBuildDir/gnuos-$Arch.iso"
+    }
+}
+
+$qemuCmd = "qemu-system-x86_64 -cdrom '$kernelIsoPath' -serial stdio"
 if ($Headless) {
     $qemuCmd += " -display none"
 }
@@ -44,14 +66,8 @@ if ($TimeoutSec -gt 0) {
     $qemuCmd = "timeout ${TimeoutSec}s $qemuCmd"
 }
 
-$commands = @($setupCmd, $cdCmd)
-if (-not $SkipBuild) {
-    $commands += $buildCmd
-}
-$commands += $qemuCmd
-
-$cmd = [string]::Join(" && ", $commands)
-& wsl.exe -d $Distro -- bash -lc $cmd
+$runCmd = "source ~/.profile >/dev/null 2>&1 || true; cd '$repoLinuxPathSafe' && $qemuCmd"
+Invoke-WslBash -DistroName $Distro -Command $runCmd
 $exitCode = $LASTEXITCODE
 if ($TimeoutSec -gt 0 -and $exitCode -eq 124) {
     return
