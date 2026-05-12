@@ -172,7 +172,7 @@
 - [x] Раннее управление памятью (физическим аллокатором страниц)
 - [x] Настройка IDT (Interrupt Descriptor Table)
 - [x] Обработчики исключений CPU (page fault, GPF, #DE, ...)
-- [ ] Настройка APIC / xAPIC / x2APIC
+- [x] Настройка APIC / xAPIC / x2APIC
 - [x] Базовый вывод через VGA/serial для отладки (`kprintf`)
 - [ ] Инициализация ACPI (парсинг таблиц RSDP, MADT, FADT)
 - [ ] Инициализация HPET / APIC Timer
