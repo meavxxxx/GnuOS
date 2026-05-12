@@ -6,6 +6,8 @@
 #define MULTIBOOT_TAG_TYPE_END 0U
 #define MULTIBOOT_TAG_TYPE_MMAP 6U
 #define MULTIBOOT_TAG_TYPE_FRAMEBUFFER 8U
+#define MULTIBOOT_TAG_TYPE_ACPI_OLD 14U
+#define MULTIBOOT_TAG_TYPE_ACPI_NEW 15U
 #define MULTIBOOT_MEMORY_AVAILABLE 1U
 #define MULTIBOOT_FRAMEBUFFER_TYPE_RGB 1U
 
@@ -201,6 +203,77 @@ int multiboot2_find_framebuffer(
         }
 
         cursor = next;
+    }
+
+    return 0;
+}
+
+int multiboot2_find_acpi_rsdp(
+    uint64_t boot_info_addr,
+    uint64_t *out_rsdp_addr,
+    uint8_t *out_revision)
+{
+    if (!out_rsdp_addr || boot_info_addr == 0U) {
+        return 0;
+    }
+
+    const multiboot_info_header_t *header =
+        (const multiboot_info_header_t *)(uintptr_t)boot_info_addr;
+    if (header->total_size < sizeof(multiboot_info_header_t)) {
+        return 0;
+    }
+
+    uintptr_t cursor = (uintptr_t)boot_info_addr + sizeof(multiboot_info_header_t);
+    uintptr_t end = (uintptr_t)boot_info_addr + (uintptr_t)header->total_size;
+    uint64_t old_rsdp = 0U;
+    uint64_t new_rsdp = 0U;
+    uint8_t new_revision = 0U;
+
+    while (cursor + sizeof(multiboot_tag_t) <= end) {
+        const multiboot_tag_t *tag = (const multiboot_tag_t *)cursor;
+        if (tag->size < sizeof(multiboot_tag_t)) {
+            return 0;
+        }
+
+        uintptr_t next = cursor + align8(tag->size);
+        if (next > end) {
+            return 0;
+        }
+
+        if (tag->type == MULTIBOOT_TAG_TYPE_END) {
+            break;
+        }
+
+        if (tag->type == MULTIBOOT_TAG_TYPE_ACPI_OLD) {
+            if (tag->size >= (sizeof(multiboot_tag_t) + 20U)) {
+                old_rsdp = (uint64_t)(cursor + sizeof(multiboot_tag_t));
+            }
+        } else if (tag->type == MULTIBOOT_TAG_TYPE_ACPI_NEW) {
+            if (tag->size >= (sizeof(multiboot_tag_t) + 36U)) {
+                const uint8_t *rsdp =
+                    (const uint8_t *)(cursor + sizeof(multiboot_tag_t));
+                new_rsdp = (uint64_t)(uintptr_t)rsdp;
+                new_revision = rsdp[15];
+            }
+        }
+
+        cursor = next;
+    }
+
+    if (new_rsdp != 0U) {
+        *out_rsdp_addr = new_rsdp;
+        if (out_revision) {
+            *out_revision = new_revision;
+        }
+        return 1;
+    }
+
+    if (old_rsdp != 0U) {
+        *out_rsdp_addr = old_rsdp;
+        if (out_revision) {
+            *out_revision = 0U;
+        }
+        return 1;
     }
 
     return 0;

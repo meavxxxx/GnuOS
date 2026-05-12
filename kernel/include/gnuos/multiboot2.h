@@ -32,4 +32,9 @@ int multiboot2_find_framebuffer(
     uint64_t boot_info_addr,
     multiboot2_framebuffer_info_t *out_info);
 
+int multiboot2_find_acpi_rsdp(
+    uint64_t boot_info_addr,
+    uint64_t *out_rsdp_addr,
+    uint8_t *out_revision);
+
 #endif

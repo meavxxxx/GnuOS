@@ -3,6 +3,7 @@
 
 #include <gnuos/capability.h>
 #include <gnuos/apic.h>
+#include <gnuos/acpi.h>
 #include <gnuos/interrupts.h>
 #include <gnuos/keyboard.h>
 #include <gnuos/dma.h>
@@ -432,6 +433,7 @@ void kmain(uint64_t boot_magic, uint64_t boot_info_addr)
     if (!vmm_init()) {
         kpanic("failed to initialize vmm");
     }
+    (void)acpi_init(boot_info_addr);
     (void)apic_init();
 
     sched_init();
