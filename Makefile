@@ -59,6 +59,18 @@ USER_CFLAGS := -std=$(CSTD) -O2 -g -ffreestanding -fno-stack-protector -fno-pie 
 	-Wall -Wextra -Wpedantic --sysroot=$(USER_SYSROOT_DIR) -isystem $(USER_SYSROOT_DIR)/usr/include \
 	-I$(USER_HEADERS_DIR)
 USER_LDSO_CFLAGS := $(USER_CFLAGS) -fPIC -Iuserspace/libc/ldso
+UEFI_DIR := boot/efi/$(ARCH)
+UEFI_HEADERS_DIR := boot/efi/include
+UEFI_STUB_SOURCE := $(UEFI_DIR)/uefi_stub.c
+UEFI_STUB_OBJECT := $(BUILD_DIR)/$(UEFI_DIR)/uefi_stub.o
+UEFI_STUB_SO := $(BUILD_DIR)/$(UEFI_DIR)/BOOTX64.so
+UEFI_STUB_EFI := $(BUILD_DIR)/$(UEFI_DIR)/BOOTX64.EFI
+UEFI_ESP_DIR := $(BUILD_DIR)/efi/EFI/BOOT
+UEFI_CC ?= x86_64-linux-gnu-gcc
+UEFI_LD ?= x86_64-linux-gnu-ld
+UEFI_OBJCOPY ?= x86_64-linux-gnu-objcopy
+UEFI_CFLAGS := -std=$(CSTD) -O2 -g -ffreestanding -fno-stack-protector -fPIC -fshort-wchar \
+	-mno-red-zone -maccumulate-outgoing-args -Wall -Wextra -Wpedantic -I$(UEFI_HEADERS_DIR)
 
 COMMON_CFLAGS := -std=$(CSTD) -O2 -g -ffreestanding -fno-stack-protector -fno-pie \
 	-mno-red-zone -mgeneral-regs-only -Wall -Wextra -Wpedantic -Iinclude -Ikernel/include
@@ -96,7 +108,7 @@ USER_DEPS := $(USER_STARTFILES_OBJECTS:.o=.d) $(USER_SMOKE_OBJECT:.o=.d) \
 	$(USER_SMOKE_DYNAMIC_OBJECT:.o=.d) $(USER_LDSO_ASM_OBJECT:.o=.d) \
 	$(USER_LDSO_C_OBJECTS:.o=.d) $(USER_LIBC_STUB_OBJECT:.o=.d)
 
-.PHONY: all kernel userspace userspace-startfiles userspace-ldso userspace-libc-stub userspace-sysroot userspace-smoke userspace-smoke-static userspace-smoke-dynamic image iso run run-debug test check-posix docs clean
+.PHONY: all kernel userspace userspace-startfiles userspace-ldso userspace-libc-stub userspace-sysroot userspace-smoke userspace-smoke-static userspace-smoke-dynamic uefi-stub image iso run run-debug test check-posix docs clean
 
 all: kernel
 
@@ -153,6 +165,22 @@ userspace-smoke: userspace-smoke-static userspace-smoke-dynamic
 userspace-smoke-static: userspace-sysroot $(USER_SMOKE_ELF)
 
 userspace-smoke-dynamic: userspace-sysroot $(USER_SMOKE_DYNAMIC_ELF)
+
+uefi-stub: $(UEFI_STUB_EFI)
+	@echo "GNU OS UEFI stub: $(UEFI_STUB_EFI)"
+
+$(UEFI_STUB_EFI): $(UEFI_STUB_SO)
+	@mkdir -p $(UEFI_ESP_DIR)
+	$(UEFI_OBJCOPY) --target=efi-app-x86_64 --subsystem=10 $< $@
+	cp $@ $(UEFI_ESP_DIR)/BOOTX64.EFI
+
+$(UEFI_STUB_SO): $(UEFI_STUB_OBJECT)
+	@mkdir -p $(dir $@)
+	$(UEFI_LD) -nostdlib -znocombreloc -shared -Bsymbolic -e efi_main -o $@ $<
+
+$(UEFI_STUB_OBJECT): $(UEFI_STUB_SOURCE)
+	@mkdir -p $(dir $@)
+	$(UEFI_CC) $(UEFI_CFLAGS) -MMD -MP -c $< -o $@
 
 $(USER_LDSO_ELF): $(USER_LDSO_OBJECTS)
 	@mkdir -p $(dir $@)
@@ -211,3 +239,4 @@ clean:
 
 -include $(KERNEL_DEPS)
 -include $(USER_DEPS)
+-include $(UEFI_STUB_OBJECT:.o=.d)

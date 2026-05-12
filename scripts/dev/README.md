@@ -24,6 +24,10 @@
 # Docker
 .\scripts\dev\docker-make.ps1 -RebuildImage kernel
 .\scripts\dev\docker-make.ps1 run
+
+# UEFI stub
+.\scripts\dev\wsl-make.ps1 -Target uefi-stub
+wsl bash scripts/qemu/run-qemu-uefi.sh build/x86_64/boot/efi/x86_64/BOOTX64.EFI
 ```
 
 ## GNU Mailman (roadmap 0.1)
