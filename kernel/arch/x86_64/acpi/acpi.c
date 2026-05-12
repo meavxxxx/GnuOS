@@ -217,7 +217,7 @@ static int acpi_find_sdt(
 
 static uint64_t acpi_madt_lapic_addr(const acpi_madt_t *madt)
 {
-    uint64_t lapic_addr = madt->local_apic_address;
+    uint64_t lapic_addr = 0U;
     const uint8_t *cursor = NULL;
     const uint8_t *end = NULL;
 
@@ -225,6 +225,7 @@ static uint64_t acpi_madt_lapic_addr(const acpi_madt_t *madt)
         return lapic_addr;
     }
 
+    lapic_addr = madt->local_apic_address;
     cursor = (const uint8_t *)madt + sizeof(acpi_madt_t);
     end = (const uint8_t *)madt + madt->header.length;
 
