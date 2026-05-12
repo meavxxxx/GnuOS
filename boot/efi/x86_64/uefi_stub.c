@@ -55,9 +55,44 @@ typedef struct {
 #define ELF64_PT_LOAD 1U
 #define ELF64_SHT_SYMTAB 2U
 #define MULTIBOOT2_BOOTLOADER_MAGIC 0x36D76289ULL
+#define MULTIBOOT2_TAG_TYPE_END 0U
+#define MULTIBOOT2_TAG_TYPE_MMAP 6U
+#define MULTIBOOT2_MEMORY_AVAILABLE 1U
+
+typedef struct {
+    uint32_t total_size;
+    uint32_t reserved;
+} __attribute__((packed)) multiboot2_info_header_t;
+
+typedef struct {
+    uint32_t type;
+    uint32_t size;
+} __attribute__((packed)) multiboot2_tag_t;
+
+typedef struct {
+    uint64_t addr;
+    uint64_t len;
+    uint32_t type;
+    uint32_t reserved;
+} __attribute__((packed)) multiboot2_mmap_entry_t;
+
+typedef struct {
+    uint32_t type;
+    uint32_t size;
+    uint32_t entry_size;
+    uint32_t entry_version;
+    multiboot2_mmap_entry_t entries[1];
+} __attribute__((packed)) multiboot2_mmap_tag_t;
+
+typedef struct {
+    multiboot2_info_header_t header;
+    multiboot2_mmap_tag_t mmap_tag;
+    multiboot2_tag_t end_tag;
+} __attribute__((packed)) multiboot2_stub_info_t;
 
 extern const unsigned char gnuos_kernel_blob_start[];
 extern const unsigned char gnuos_kernel_blob_end[];
+static multiboot2_stub_info_t g_multiboot2_stub_info;
 
 static void efi_puts(EFI_SYSTEM_TABLE *system_table, const CHAR16 *text)
 {
@@ -113,6 +148,37 @@ static int gnuos_str_equal(const char *lhs, const char *rhs)
 static uint64_t gnuos_align_up(uint64_t value, uint64_t alignment)
 {
     return (value + (alignment - 1ULL)) & ~(alignment - 1ULL);
+}
+
+static uint32_t gnuos_align_up32(uint32_t value, uint32_t alignment)
+{
+    return (value + (alignment - 1U)) & ~(alignment - 1U);
+}
+
+static uint64_t gnuos_build_multiboot2_stub_info(void)
+{
+    uint32_t mmap_tag_size = (uint32_t)sizeof(multiboot2_mmap_tag_t);
+    uint32_t total_size = 0U;
+
+    g_multiboot2_stub_info.mmap_tag.type = MULTIBOOT2_TAG_TYPE_MMAP;
+    g_multiboot2_stub_info.mmap_tag.size = mmap_tag_size;
+    g_multiboot2_stub_info.mmap_tag.entry_size = (uint32_t)sizeof(multiboot2_mmap_entry_t);
+    g_multiboot2_stub_info.mmap_tag.entry_version = 0U;
+    g_multiboot2_stub_info.mmap_tag.entries[0].addr = 0x00100000ULL;
+    g_multiboot2_stub_info.mmap_tag.entries[0].len = 64ULL * 1024ULL * 1024ULL;
+    g_multiboot2_stub_info.mmap_tag.entries[0].type = MULTIBOOT2_MEMORY_AVAILABLE;
+    g_multiboot2_stub_info.mmap_tag.entries[0].reserved = 0U;
+
+    g_multiboot2_stub_info.end_tag.type = MULTIBOOT2_TAG_TYPE_END;
+    g_multiboot2_stub_info.end_tag.size = (uint32_t)sizeof(multiboot2_tag_t);
+
+    total_size = (uint32_t)sizeof(multiboot2_info_header_t);
+    total_size += gnuos_align_up32(mmap_tag_size, 8U);
+    total_size += gnuos_align_up32((uint32_t)sizeof(multiboot2_tag_t), 8U);
+
+    g_multiboot2_stub_info.header.total_size = total_size;
+    g_multiboot2_stub_info.header.reserved = 0U;
+    return (uint64_t)(UINTN)&g_multiboot2_stub_info;
 }
 
 static EFI_STATUS gnuos_load_kernel_segments(
@@ -261,6 +327,7 @@ EFI_STATUS EFIAPI efi_main(EFI_HANDLE image_handle, EFI_SYSTEM_TABLE *system_tab
     const elf64_ehdr_t *ehdr;
     EFI_STATUS load_status;
     gnuos_kernel_main_t kmain_entry;
+    uint64_t multiboot_info_addr;
 
     (void)image_handle;
     efi_puts(system_table, banner);
@@ -294,8 +361,9 @@ EFI_STATUS EFIAPI efi_main(EFI_HANDLE image_handle, EFI_SYSTEM_TABLE *system_tab
         return 5ULL;
     }
 
+    multiboot_info_addr = gnuos_build_multiboot2_stub_info();
     efi_puts(system_table, handoff);
-    kmain_entry(MULTIBOOT2_BOOTLOADER_MAGIC, 0ULL);
+    kmain_entry(MULTIBOOT2_BOOTLOADER_MAGIC, multiboot_info_addr);
 
     static const CHAR16 returned[] = {
         'G', 'N', 'U', ' ', 'O', 'S', ':', ' ',

@@ -8,7 +8,7 @@ Current status:
 - Stub prints a boot banner through UEFI `ConOut`.
 - Stub embeds `build/x86_64/kernel.elf`, maps `PT_LOAD` segments, resolves
   `kmain`, and includes a prototype 64-bit handoff path with multiboot2 magic
-  + fallback boot info pointer.
+  + synthetic mmap boot info block.
 - OVMF run helper is available in `scripts/qemu/run-qemu-uefi.sh`.
 
 Build:
