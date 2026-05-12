@@ -18,13 +18,15 @@ make ARCH=x86_64 image
 make ARCH=x86_64 run
 ```
 
-## Project docs
+## Навигация по репозиторию
 
-- Documentation hub: [`docs/README.md`](docs/README.md)
-- Full roadmap and checkbox progress: [`docs/ROADMAP.md`](docs/ROADMAP.md)
-- Contributor guide: [`CONTRIBUTING.md`](CONTRIBUTING.md)
-- Kernel docs: [`kernel/README.md`](kernel/README.md)
-- Userspace docs: [`userspace/README.md`](userspace/README.md)
+- Центр документации: [`docs/README.md`](docs/README.md)
+- Скрипты и автоматизация: [`scripts/README.md`](scripts/README.md)
+- Подсистема загрузки: [`boot/README.md`](boot/README.md)
+- Подсистема ядра: [`kernel/README.md`](kernel/README.md)
+- Подсистема userspace: [`userspace/README.md`](userspace/README.md)
+- Тестовые наборы: [`tests/README.md`](tests/README.md)
+- Пакетная подсистема: [`pkg/README.md`](pkg/README.md)
 
 ## Repository structure
 
