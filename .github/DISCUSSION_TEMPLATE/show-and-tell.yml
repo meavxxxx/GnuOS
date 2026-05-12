@@ -1,0 +1,38 @@
+title: "[Show and tell] "
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Share demos, experiments, screenshots, and integration attempts.
+  - type: input
+    id: showcase_title
+    attributes:
+      label: Showcase title
+      description: Short title for what you're sharing.
+      placeholder: "Booted GNU OS UEFI stub with serial capture on WSL"
+    validations:
+      required: true
+  - type: textarea
+    id: what_built
+    attributes:
+      label: What did you build/test?
+      description: Explain what you tried and why.
+      placeholder: "Summary of your demo/experiment..."
+    validations:
+      required: true
+  - type: input
+    id: artifacts
+    attributes:
+      label: Artifacts
+      description: Links to screenshots, videos, logs, or repos.
+      placeholder: "https://... (screenshots/video/logs)"
+    validations:
+      required: false
+  - type: textarea
+    id: takeaways
+    attributes:
+      label: Takeaways
+      description: What worked, what failed, and recommendations.
+      placeholder: "Results and lessons learned..."
+    validations:
+      required: false

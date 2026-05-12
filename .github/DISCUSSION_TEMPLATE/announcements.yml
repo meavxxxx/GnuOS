@@ -1,0 +1,38 @@
+title: "[Announcement] "
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Use this template for official project updates from maintainers.
+  - type: input
+    id: summary
+    attributes:
+      label: Summary
+      description: One-line summary of the announcement.
+      placeholder: "Phase 1.1 UEFI handoff is now complete."
+    validations:
+      required: true
+  - type: textarea
+    id: details
+    attributes:
+      label: Details
+      description: What changed, why it matters, and who is impacted.
+      placeholder: "Describe the update and context..."
+    validations:
+      required: true
+  - type: textarea
+    id: action_items
+    attributes:
+      label: Action required
+      description: What should contributors/users do next (if anything)?
+      placeholder: "- Pull latest main branch\n- Rebuild locally\n- Report regressions in Issues"
+    validations:
+      required: false
+  - type: input
+    id: references
+    attributes:
+      label: References
+      description: Related links (PR, commit, workflow run, docs page).
+      placeholder: "https://github.com/meavxxxx/TempOS/commit/..."
+    validations:
+      required: false

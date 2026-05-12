@@ -42,6 +42,14 @@
 - Тестовые наборы: [`tests/README.md`](tests/README.md)
 - Пакетная подсистема: [`pkg/README.md`](pkg/README.md)
 
+## Обратная связь
+
+- Вопросы и помощь: <https://github.com/meavxxxx/TempOS/discussions/categories/q-a>
+- Идеи и предложения: <https://github.com/meavxxxx/TempOS/discussions/categories/ideas>
+- Общие обсуждения: <https://github.com/meavxxxx/TempOS/discussions/categories/general>
+- Демо и кейсы: <https://github.com/meavxxxx/TempOS/discussions/categories/show-and-tell>
+- Официальные анонсы: <https://github.com/meavxxxx/TempOS/discussions/categories/announcements>
+
 ---
 
 ## Концепция проекта

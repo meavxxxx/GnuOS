@@ -1,0 +1,51 @@
+title: "[Q&A] "
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Ask setup/runtime/development questions here.
+  - type: input
+    id: question_summary
+    attributes:
+      label: Question summary
+      description: One sentence with your main question.
+      placeholder: "How do I boot GNU OS in UEFI mode on Windows + WSL?"
+    validations:
+      required: true
+  - type: textarea
+    id: question_details
+    attributes:
+      label: Question details
+      description: Include what you are trying to do and where it stops.
+      placeholder: "Detailed question..."
+    validations:
+      required: true
+  - type: textarea
+    id: tried
+    attributes:
+      label: What you already tried
+      description: Commands/steps you've already executed.
+      placeholder: "- make ARCH=x86_64 uefi-stub\n- bash scripts/qemu/run-qemu-uefi.sh ..."
+    validations:
+      required: true
+  - type: dropdown
+    id: environment
+    attributes:
+      label: Environment
+      description: Select your main environment.
+      options:
+        - Windows + WSL
+        - Linux
+        - Docker
+        - CI runner
+        - Other
+    validations:
+      required: true
+  - type: textarea
+    id: logs
+    attributes:
+      label: Logs/output
+      description: Paste relevant output snippets.
+      render: shell
+    validations:
+      required: false

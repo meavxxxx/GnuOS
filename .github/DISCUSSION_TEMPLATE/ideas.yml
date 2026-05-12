@@ -1,0 +1,46 @@
+title: "[Idea] "
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Propose improvements before implementation work starts.
+  - type: input
+    id: idea_title
+    attributes:
+      label: Idea title
+      description: One-line summary of the proposal.
+      placeholder: "Add framebuffer abstraction for early boot output"
+    validations:
+      required: true
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem
+      description: What pain point does this solve?
+      placeholder: "Current workflow/problem..."
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposal
+      description: Describe the approach at a high level.
+      placeholder: "Proposed design..."
+    validations:
+      required: true
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives considered
+      description: What options were considered and rejected?
+      placeholder: "Alternative A/B and tradeoffs..."
+    validations:
+      required: false
+  - type: textarea
+    id: risks
+    attributes:
+      label: Risks and tradeoffs
+      description: Potential complexity, regressions, and maintenance cost.
+      placeholder: "Potential risks..."
+    validations:
+      required: false

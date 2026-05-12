@@ -1,0 +1,44 @@
+title: "[General] "
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Open general project discussions that are not strict bugs or feature requests.
+  - type: input
+    id: topic
+    attributes:
+      label: Topic
+      description: Short topic title.
+      placeholder: "Roadmap sequencing and release cadence"
+    validations:
+      required: true
+  - type: textarea
+    id: discussion
+    attributes:
+      label: Discussion
+      description: Share your question, suggestion, or perspective.
+      placeholder: "Write your discussion here..."
+    validations:
+      required: true
+  - type: dropdown
+    id: area
+    attributes:
+      label: Area
+      description: Which part of the project is this about?
+      options:
+        - Boot/UEFI
+        - Kernel
+        - Userspace/libc
+        - Tooling/CI
+        - Docs/process
+        - Other
+    validations:
+      required: true
+  - type: input
+    id: references
+    attributes:
+      label: References
+      description: Optional links to commits, issues, docs, or logs.
+      placeholder: "https://github.com/meavxxxx/TempOS/..."
+    validations:
+      required: false
