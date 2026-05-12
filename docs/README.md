@@ -4,7 +4,7 @@ Use this page as the main index for project documentation.
 
 ## Core
 
-- Roadmap and delivery status: [`README.md`](../README.md)
+- Roadmap and delivery status: [`ROADMAP.md`](ROADMAP.md)
 - Contributor guide: [`CONTRIBUTING.md`](../CONTRIBUTING.md)
 - Code of conduct: [`CODE_OF_CONDUCT.md`](../CODE_OF_CONDUCT.md)
 
@@ -31,3 +31,4 @@ Use this page as the main index for project documentation.
 - Wiki index: [`docs/wiki/README.md`](wiki/README.md)
 - FAQ: [`docs/wiki/faq.md`](wiki/faq.md)
 - Glossary: [`docs/wiki/glossary.md`](wiki/glossary.md)
+

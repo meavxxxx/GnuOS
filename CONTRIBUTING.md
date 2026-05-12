@@ -4,7 +4,7 @@ Thanks for helping build GNU OS.
 
 ## Repository navigation
 
-- Project roadmap and delivery status: [`README.md`](README.md)
+- Project roadmap and delivery status: [`docs/ROADMAP.md`](docs/ROADMAP.md)
 - Documentation index: [`docs/README.md`](docs/README.md)
 - Automation/scripts index: [`scripts/README.md`](scripts/README.md)
 - Kernel layout: [`kernel/README.md`](kernel/README.md)
@@ -32,7 +32,7 @@ Public task tracker rules are defined in
 - New behavior needs tests when possible.
 - Kernel-impacting changes require security review.
 - At least two approvals are required before merge.
-- After completing roadmap items, update checkboxes in `README.md` in the same change set.
+- After completing roadmap items, update checkboxes in `docs/ROADMAP.md` in the same change set.
 
 ## Coding rules
 
@@ -48,3 +48,4 @@ make ARCH=x86_64 kernel
 make ARCH=x86_64 image
 make ARCH=x86_64 run
 ```
+

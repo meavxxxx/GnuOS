@@ -44,4 +44,5 @@ Examples:
 ## Roadmap discipline
 
 - If a roadmap task is completed in code/docs, update the corresponding
-  checkbox in `README.md` in the same pull request.
+  checkbox in `docs/ROADMAP.md` in the same pull request.
+
