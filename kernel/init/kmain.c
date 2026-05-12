@@ -382,6 +382,8 @@ void kmain(uint64_t boot_magic, uint64_t boot_info_addr)
     task_t *ipc_rendezvous_sender_task = NULL;
     task_t *ipc_rendezvous_receiver_task = NULL;
     int have_mmap = 0;
+    int have_framebuffer = 0;
+    multiboot2_framebuffer_info_t framebuffer_info = {0};
 
     vga_clear(0x07);
     serial_init();
@@ -395,10 +397,29 @@ void kmain(uint64_t boot_magic, uint64_t boot_info_addr)
         boot_info_addr,
         &pmm_base,
         &pmm_size);
+    have_framebuffer = multiboot2_find_framebuffer(boot_info_addr, &framebuffer_info);
     if (!have_mmap) {
         serial_write("GNU OS: no valid multiboot memory map found, using fallback.\n");
         pmm_base = 0x100000ULL;
         pmm_size = 64ULL * 1024ULL * 1024ULL;
+    }
+    if (have_framebuffer) {
+        kprintf(
+            "GNU OS: framebuffer addr=0x%X pitch=%u size=%ux%u bpp=%u type=%u rgb=%u/%u %u/%u %u/%u\n",
+            framebuffer_info.address,
+            (uint64_t)framebuffer_info.pitch,
+            (uint64_t)framebuffer_info.width,
+            (uint64_t)framebuffer_info.height,
+            (uint64_t)framebuffer_info.bpp,
+            (uint64_t)framebuffer_info.type,
+            (uint64_t)framebuffer_info.red_field_position,
+            (uint64_t)framebuffer_info.red_mask_size,
+            (uint64_t)framebuffer_info.green_field_position,
+            (uint64_t)framebuffer_info.green_mask_size,
+            (uint64_t)framebuffer_info.blue_field_position,
+            (uint64_t)framebuffer_info.blue_mask_size);
+    } else {
+        serial_write("GNU OS: framebuffer tag not present.\n");
     }
 
     pmm_init(pmm_base, pmm_size);

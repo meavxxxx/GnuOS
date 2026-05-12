@@ -165,7 +165,7 @@
 - [x] Передача управления ядру с картой памяти
 - [x] Поддержка UEFI (UEFI stub loader)
 - [x] Минимальный UEFI stub scaffolding (`BOOTX64.EFI`, OVMF run script, prototype handoff path в `kmain`)
-- [ ] Настройка framebuffer для раннего вывода (VESA / GOP)
+- [x] Настройка framebuffer для раннего вывода (VESA / GOP)
 
 #### 1.2 Начальная инициализация ядра
 

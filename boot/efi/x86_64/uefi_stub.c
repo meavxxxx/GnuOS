@@ -57,11 +57,13 @@ typedef struct {
 #define MULTIBOOT2_BOOTLOADER_MAGIC 0x36D76289ULL
 #define MULTIBOOT2_TAG_TYPE_END 0U
 #define MULTIBOOT2_TAG_TYPE_MMAP 6U
+#define MULTIBOOT2_TAG_TYPE_FRAMEBUFFER 8U
 #define MULTIBOOT2_MEMORY_AVAILABLE 1U
 #define MULTIBOOT2_MEMORY_RESERVED 2U
 #define MULTIBOOT2_MEMORY_ACPI_RECLAIMABLE 3U
 #define MULTIBOOT2_MEMORY_ACPI_NVS 4U
 #define MULTIBOOT2_MEMORY_BADRAM 5U
+#define MULTIBOOT2_FRAMEBUFFER_TYPE_RGB 1U
 
 #define EFI_INVALID_PARAMETER 0x8000000000000002ULL
 #define EFI_BUFFER_TOO_SMALL 0x8000000000000005ULL
@@ -96,12 +98,54 @@ typedef struct {
 } __attribute__((packed)) multiboot2_mmap_tag_t;
 
 typedef struct {
+    uint32_t type;
+    uint32_t size;
+    uint64_t framebuffer_addr;
+    uint32_t framebuffer_pitch;
+    uint32_t framebuffer_width;
+    uint32_t framebuffer_height;
+    uint8_t framebuffer_bpp;
+    uint8_t framebuffer_type;
+    uint16_t reserved;
+} __attribute__((packed)) multiboot2_framebuffer_tag_t;
+
+typedef struct {
+    uint8_t red_field_position;
+    uint8_t red_mask_size;
+    uint8_t green_field_position;
+    uint8_t green_mask_size;
+    uint8_t blue_field_position;
+    uint8_t blue_mask_size;
+} __attribute__((packed)) multiboot2_framebuffer_rgb_info_t;
+
+typedef struct {
     EFI_PHYSICAL_ADDRESS base;
     UINTN size_bytes;
 } gnuos_efi_buffer_t;
 
+typedef struct {
+    uint8_t present;
+    uint64_t framebuffer_addr;
+    uint32_t pitch;
+    uint32_t width;
+    uint32_t height;
+    uint8_t bpp;
+    uint8_t red_field_position;
+    uint8_t red_mask_size;
+    uint8_t green_field_position;
+    uint8_t green_mask_size;
+    uint8_t blue_field_position;
+    uint8_t blue_mask_size;
+} gnuos_efi_framebuffer_info_t;
+
 extern const unsigned char gnuos_kernel_blob_start[];
 extern const unsigned char gnuos_kernel_blob_end[];
+static EFI_GUID g_gop_protocol_guid = {
+    0x9042A9DEU,
+    0x23DCU,
+    0x4A38U,
+    {0x96U, 0xFBU, 0x7AU, 0xDEU, 0xD0U, 0x80U, 0x51U, 0x6AU}
+};
 
 static void efi_puts(EFI_SYSTEM_TABLE *system_table, const CHAR16 *text)
 {
@@ -157,6 +201,105 @@ static int gnuos_str_equal(const char *lhs, const char *rhs)
 static uint64_t gnuos_align_up(uint64_t value, uint64_t alignment)
 {
     return (value + (alignment - 1ULL)) & ~(alignment - 1ULL);
+}
+
+static uint8_t gnuos_bitmask_lsb(uint32_t mask)
+{
+    uint8_t shift = 0U;
+
+    if (mask == 0U) {
+        return 0U;
+    }
+
+    while ((mask & 1U) == 0U) {
+        mask >>= 1U;
+        shift++;
+    }
+    return shift;
+}
+
+static uint8_t gnuos_bitmask_size(uint32_t mask)
+{
+    uint8_t size = 0U;
+
+    if (mask == 0U) {
+        return 0U;
+    }
+
+    mask >>= gnuos_bitmask_lsb(mask);
+    while ((mask & 1U) != 0U) {
+        mask >>= 1U;
+        size++;
+    }
+    return size;
+}
+
+static EFI_STATUS gnuos_probe_gop_framebuffer(
+    EFI_SYSTEM_TABLE *system_table,
+    gnuos_efi_framebuffer_info_t *out_info)
+{
+    EFI_GRAPHICS_OUTPUT_PROTOCOL *gop = 0;
+    EFI_GRAPHICS_OUTPUT_PROTOCOL_MODE *mode = 0;
+    EFI_GRAPHICS_OUTPUT_MODE_INFORMATION *info = 0;
+    EFI_STATUS status = EFI_SUCCESS;
+
+    if (!out_info) {
+        return 10ULL;
+    }
+
+    (void)gnuos_memset(out_info, 0, sizeof(*out_info));
+    if (!system_table || !system_table->BootServices || !system_table->BootServices->LocateProtocol) {
+        return EFI_SUCCESS;
+    }
+
+    status = system_table->BootServices->LocateProtocol(
+        &g_gop_protocol_guid,
+        0,
+        (void **)&gop);
+    if (status != EFI_SUCCESS || !gop || !gop->Mode || !gop->Mode->Info) {
+        return EFI_SUCCESS;
+    }
+
+    mode = gop->Mode;
+    info = mode->Info;
+    if (mode->FrameBufferBase == 0U || info->HorizontalResolution == 0U ||
+        info->VerticalResolution == 0U || info->PixelsPerScanLine == 0U) {
+        return EFI_SUCCESS;
+    }
+
+    out_info->framebuffer_addr = (uint64_t)mode->FrameBufferBase;
+    out_info->pitch = info->PixelsPerScanLine * 4U;
+    out_info->width = info->HorizontalResolution;
+    out_info->height = info->VerticalResolution;
+    out_info->bpp = 32U;
+
+    if (info->PixelFormat == PixelRedGreenBlueReserved8BitPerColor) {
+        out_info->red_field_position = 0U;
+        out_info->red_mask_size = 8U;
+        out_info->green_field_position = 8U;
+        out_info->green_mask_size = 8U;
+        out_info->blue_field_position = 16U;
+        out_info->blue_mask_size = 8U;
+    } else if (info->PixelFormat == PixelBlueGreenRedReserved8BitPerColor) {
+        out_info->red_field_position = 16U;
+        out_info->red_mask_size = 8U;
+        out_info->green_field_position = 8U;
+        out_info->green_mask_size = 8U;
+        out_info->blue_field_position = 0U;
+        out_info->blue_mask_size = 8U;
+    } else if (info->PixelFormat == PixelBitMask) {
+        out_info->red_field_position = gnuos_bitmask_lsb(info->PixelInformation.RedMask);
+        out_info->red_mask_size = gnuos_bitmask_size(info->PixelInformation.RedMask);
+        out_info->green_field_position = gnuos_bitmask_lsb(info->PixelInformation.GreenMask);
+        out_info->green_mask_size = gnuos_bitmask_size(info->PixelInformation.GreenMask);
+        out_info->blue_field_position = gnuos_bitmask_lsb(info->PixelInformation.BlueMask);
+        out_info->blue_mask_size = gnuos_bitmask_size(info->PixelInformation.BlueMask);
+    } else {
+        return EFI_SUCCESS;
+    }
+
+    out_info->present = 1U;
+    return EFI_SUCCESS;
 }
 
 static uint32_t gnuos_efi_memory_type_to_multiboot(uint32_t efi_memory_type)
@@ -284,16 +427,21 @@ static EFI_STATUS gnuos_build_multiboot2_info(
     UINTN memory_map_size,
     UINTN descriptor_size,
     const gnuos_efi_buffer_t *boot_info_buffer,
+    const gnuos_efi_framebuffer_info_t *framebuffer_info,
     uint64_t *boot_info_addr_out)
 {
     uint64_t descriptor_count;
     uint64_t mmap_tag_size;
+    uint64_t framebuffer_tag_size = 0ULL;
     uint64_t total_size;
     multiboot2_info_header_t *header;
     multiboot2_mmap_tag_t *mmap_tag;
     multiboot2_mmap_entry_t *entries;
+    multiboot2_framebuffer_tag_t *framebuffer_tag = 0;
+    multiboot2_framebuffer_rgb_info_t *framebuffer_rgb = 0;
     multiboot2_tag_t *end_tag;
     uint64_t index;
+    uint64_t cursor;
     unsigned char *boot_info_base;
 
     if (!memory_map || descriptor_size == 0U || !boot_info_buffer || !boot_info_addr_out) {
@@ -313,6 +461,11 @@ static EFI_STATUS gnuos_build_multiboot2_info(
 
     total_size = (uint64_t)sizeof(multiboot2_info_header_t);
     total_size += gnuos_align_up(mmap_tag_size, 8ULL);
+    if (framebuffer_info && framebuffer_info->present) {
+        framebuffer_tag_size = (uint64_t)sizeof(multiboot2_framebuffer_tag_t) +
+            (uint64_t)sizeof(multiboot2_framebuffer_rgb_info_t);
+        total_size += gnuos_align_up(framebuffer_tag_size, 8ULL);
+    }
     total_size += gnuos_align_up((uint64_t)sizeof(multiboot2_tag_t), 8ULL);
     if (total_size > 0xFFFFFFFFULL ||
         total_size > (uint64_t)boot_info_buffer->size_bytes) {
@@ -341,9 +494,32 @@ static EFI_STATUS gnuos_build_multiboot2_info(
     mmap_tag->entry_size = (uint32_t)sizeof(multiboot2_mmap_entry_t);
     mmap_tag->entry_version = 0U;
 
-    end_tag = (multiboot2_tag_t *)(void
-            *)(boot_info_base + sizeof(multiboot2_info_header_t) +
-               (UINTN)gnuos_align_up((uint64_t)mmap_tag->size, 8ULL));
+    cursor = (uint64_t)sizeof(multiboot2_info_header_t) + gnuos_align_up(mmap_tag_size, 8ULL);
+    if (framebuffer_tag_size > 0ULL) {
+        framebuffer_tag = (multiboot2_framebuffer_tag_t *)(void *)(boot_info_base + (UINTN)cursor);
+        framebuffer_tag->type = MULTIBOOT2_TAG_TYPE_FRAMEBUFFER;
+        framebuffer_tag->size = (uint32_t)framebuffer_tag_size;
+        framebuffer_tag->framebuffer_addr = framebuffer_info->framebuffer_addr;
+        framebuffer_tag->framebuffer_pitch = framebuffer_info->pitch;
+        framebuffer_tag->framebuffer_width = framebuffer_info->width;
+        framebuffer_tag->framebuffer_height = framebuffer_info->height;
+        framebuffer_tag->framebuffer_bpp = framebuffer_info->bpp;
+        framebuffer_tag->framebuffer_type = MULTIBOOT2_FRAMEBUFFER_TYPE_RGB;
+        framebuffer_tag->reserved = 0U;
+
+        framebuffer_rgb = (multiboot2_framebuffer_rgb_info_t *)(void
+                *)((unsigned char *)framebuffer_tag + sizeof(multiboot2_framebuffer_tag_t));
+        framebuffer_rgb->red_field_position = framebuffer_info->red_field_position;
+        framebuffer_rgb->red_mask_size = framebuffer_info->red_mask_size;
+        framebuffer_rgb->green_field_position = framebuffer_info->green_field_position;
+        framebuffer_rgb->green_mask_size = framebuffer_info->green_mask_size;
+        framebuffer_rgb->blue_field_position = framebuffer_info->blue_field_position;
+        framebuffer_rgb->blue_mask_size = framebuffer_info->blue_mask_size;
+
+        cursor += gnuos_align_up(framebuffer_tag_size, 8ULL);
+    }
+
+    end_tag = (multiboot2_tag_t *)(void *)(boot_info_base + (UINTN)cursor);
     end_tag->type = MULTIBOOT2_TAG_TYPE_END;
     end_tag->size = (uint32_t)sizeof(multiboot2_tag_t);
 
@@ -515,6 +691,7 @@ EFI_STATUS EFIAPI efi_main(EFI_HANDLE image_handle, EFI_SYSTEM_TABLE *system_tab
     UINTN map_key = 0U;
     UINTN descriptor_size = 0U;
     gnuos_efi_buffer_t multiboot_info_buffer = {0};
+    gnuos_efi_framebuffer_info_t framebuffer_info = {0};
     gnuos_kernel_main_t kmain_entry;
     uint64_t multiboot_info_addr = 0U;
     uint8_t attempt = 0U;
@@ -555,6 +732,7 @@ EFI_STATUS EFIAPI efi_main(EFI_HANDLE image_handle, EFI_SYSTEM_TABLE *system_tab
         efi_puts(system_table, failed);
         return status;
     }
+    (void)gnuos_probe_gop_framebuffer(system_table, &framebuffer_info);
 
     efi_puts(system_table, handoff);
     for (attempt = 0U; attempt < GNUOS_EFI_EXIT_BOOT_SERVICES_RETRIES; attempt++) {
@@ -580,6 +758,7 @@ EFI_STATUS EFIAPI efi_main(EFI_HANDLE image_handle, EFI_SYSTEM_TABLE *system_tab
             memory_map_size,
             descriptor_size,
             &multiboot_info_buffer,
+            &framebuffer_info,
             &multiboot_info_addr);
         if (status != EFI_SUCCESS) {
             efi_puts(system_table, failed);

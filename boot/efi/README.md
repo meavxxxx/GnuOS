@@ -10,6 +10,8 @@ Current status:
   `kmain`, builds a multiboot2-compatible memory-map tag from UEFI
   `GetMemoryMap()` descriptors, and performs explicit `ExitBootServices`
   before kernel handoff.
+- Stub probes UEFI GOP and, when available, emits a multiboot2 framebuffer
+  tag so kernel early bring-up can consume framebuffer geometry/pixel layout.
 - OVMF run helper is available in `scripts/qemu/run-qemu-uefi.sh`.
 
 Build:
@@ -24,6 +26,4 @@ Run under QEMU + OVMF:
 bash scripts/qemu/run-qemu-uefi.sh build/x86_64/boot/efi/x86_64/BOOTX64.EFI
 ```
 
-Next milestone for roadmap item `1.1`:
-
-- configure framebuffer for early output (VESA / GOP).
+Roadmap item `1.1` status: completed.
