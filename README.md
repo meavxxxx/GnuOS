@@ -26,6 +26,26 @@ make ARCH=x86_64 run
 - Kernel docs: [`kernel/README.md`](kernel/README.md)
 - Userspace docs: [`userspace/README.md`](userspace/README.md)
 
+## Repository structure
+
+```text
+gnuos/
+├── boot/            # Bootloader and early init
+├── kernel/          # Kernel sources
+├── userspace/       # libc, runtime, userland components
+├── pkg/             # Package subsystem
+├── scripts/         # Build, CI, dev automation
+├── tests/           # Unit, integration, POSIX tests
+├── docs/            # Project documentation
+├── include/         # Public headers
+├── lib/             # Shared/kernel support libraries
+├── Makefile
+├── configure
+├── CONTRIBUTING.md
+├── LICENSE
+└── README.md
+```
+
 ## Feedback
 
 - Discussions: <https://github.com/meavxxxx/TempOS/discussions>
