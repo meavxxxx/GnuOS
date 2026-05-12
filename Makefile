@@ -63,6 +63,7 @@ UEFI_DIR := boot/efi/$(ARCH)
 UEFI_HEADERS_DIR := boot/efi/include
 UEFI_STUB_SOURCE := $(UEFI_DIR)/uefi_stub.c
 UEFI_STUB_OBJECT := $(BUILD_DIR)/$(UEFI_DIR)/uefi_stub.o
+UEFI_KERNEL_BLOB_OBJECT := $(BUILD_DIR)/$(UEFI_DIR)/kernel_blob.o
 UEFI_STUB_SO := $(BUILD_DIR)/$(UEFI_DIR)/BOOTX64.so
 UEFI_STUB_EFI := $(BUILD_DIR)/$(UEFI_DIR)/BOOTX64.EFI
 UEFI_ESP_DIR := $(BUILD_DIR)/efi/EFI/BOOT
@@ -174,13 +175,22 @@ $(UEFI_STUB_EFI): $(UEFI_STUB_SO)
 	$(UEFI_OBJCOPY) --target=efi-app-x86_64 --subsystem=10 $< $@
 	cp $@ $(UEFI_ESP_DIR)/BOOTX64.EFI
 
-$(UEFI_STUB_SO): $(UEFI_STUB_OBJECT)
+$(UEFI_STUB_SO): $(UEFI_STUB_OBJECT) $(UEFI_KERNEL_BLOB_OBJECT)
 	@mkdir -p $(dir $@)
-	$(UEFI_LD) -nostdlib -znocombreloc -shared -Bsymbolic -e efi_main -o $@ $<
+	$(UEFI_LD) -nostdlib -znocombreloc -shared -Bsymbolic -z noexecstack -e efi_main -o $@ $^
 
 $(UEFI_STUB_OBJECT): $(UEFI_STUB_SOURCE)
 	@mkdir -p $(dir $@)
 	$(UEFI_CC) $(UEFI_CFLAGS) -MMD -MP -c $< -o $@
+
+$(UEFI_KERNEL_BLOB_OBJECT): $(KERNEL_ELF)
+	@mkdir -p $(dir $@)
+	$(UEFI_OBJCOPY) -I binary -O elf64-x86-64 -B i386:x86-64 $< $@
+	$(UEFI_OBJCOPY) \
+		--redefine-sym _binary_build_$(ARCH)_kernel_elf_start=gnuos_kernel_blob_start \
+		--redefine-sym _binary_build_$(ARCH)_kernel_elf_end=gnuos_kernel_blob_end \
+		--redefine-sym _binary_build_$(ARCH)_kernel_elf_size=gnuos_kernel_blob_size \
+		$@
 
 $(USER_LDSO_ELF): $(USER_LDSO_OBJECTS)
 	@mkdir -p $(dir $@)

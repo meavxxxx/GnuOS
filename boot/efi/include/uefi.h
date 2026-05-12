@@ -7,6 +7,7 @@ typedef uint64_t EFI_STATUS;
 typedef void *EFI_HANDLE;
 typedef uint16_t CHAR16;
 typedef uint64_t UINTN;
+typedef uint64_t EFI_PHYSICAL_ADDRESS;
 
 #define EFI_SUCCESS 0ULL
 
@@ -43,6 +44,88 @@ struct EFI_SIMPLE_TEXT_OUTPUT_PROTOCOL {
     void *Mode;
 };
 
+typedef enum {
+    AllocateAnyPages = 0,
+    AllocateMaxAddress = 1,
+    AllocateAddress = 2,
+    MaxAllocateType = 3
+} EFI_ALLOCATE_TYPE;
+
+typedef enum {
+    EfiReservedMemoryType = 0,
+    EfiLoaderCode = 1,
+    EfiLoaderData = 2,
+    EfiBootServicesCode = 3,
+    EfiBootServicesData = 4,
+    EfiRuntimeServicesCode = 5,
+    EfiRuntimeServicesData = 6,
+    EfiConventionalMemory = 7,
+    EfiUnusableMemory = 8,
+    EfiACPIReclaimMemory = 9,
+    EfiACPIMemoryNVS = 10,
+    EfiMemoryMappedIO = 11,
+    EfiMemoryMappedIOPortSpace = 12,
+    EfiPalCode = 13,
+    EfiPersistentMemory = 14,
+    EfiMaxMemoryType = 15
+} EFI_MEMORY_TYPE;
+
+typedef struct EFI_BOOT_SERVICES EFI_BOOT_SERVICES;
+typedef EFI_STATUS(EFIAPI *EFI_ALLOCATE_PAGES)(
+    EFI_ALLOCATE_TYPE type,
+    EFI_MEMORY_TYPE memory_type,
+    UINTN pages,
+    EFI_PHYSICAL_ADDRESS *memory);
+typedef EFI_STATUS(EFIAPI *EFI_FREE_PAGES)(EFI_PHYSICAL_ADDRESS memory, UINTN pages);
+
+struct EFI_BOOT_SERVICES {
+    EFI_TABLE_HEADER Hdr;
+    void *RaiseTPL;
+    void *RestoreTPL;
+    EFI_ALLOCATE_PAGES AllocatePages;
+    EFI_FREE_PAGES FreePages;
+    void *GetMemoryMap;
+    void *AllocatePool;
+    void *FreePool;
+    void *CreateEvent;
+    void *SetTimer;
+    void *WaitForEvent;
+    void *SignalEvent;
+    void *CloseEvent;
+    void *CheckEvent;
+    void *InstallProtocolInterface;
+    void *ReinstallProtocolInterface;
+    void *UninstallProtocolInterface;
+    void *HandleProtocol;
+    void *Reserved;
+    void *RegisterProtocolNotify;
+    void *LocateHandle;
+    void *LocateDevicePath;
+    void *InstallConfigurationTable;
+    void *LoadImage;
+    void *StartImage;
+    void *Exit;
+    void *UnloadImage;
+    void *ExitBootServices;
+    void *GetNextMonotonicCount;
+    void *Stall;
+    void *SetWatchdogTimer;
+    void *ConnectController;
+    void *DisconnectController;
+    void *OpenProtocol;
+    void *CloseProtocol;
+    void *OpenProtocolInformation;
+    void *ProtocolsPerHandle;
+    void *LocateHandleBuffer;
+    void *LocateProtocol;
+    void *InstallMultipleProtocolInterfaces;
+    void *UninstallMultipleProtocolInterfaces;
+    void *CalculateCrc32;
+    void *CopyMem;
+    void *SetMem;
+    void *CreateEventEx;
+};
+
 typedef struct {
     EFI_TABLE_HEADER Hdr;
     CHAR16 *FirmwareVendor;
@@ -54,7 +137,7 @@ typedef struct {
     EFI_HANDLE StandardErrorHandle;
     EFI_SIMPLE_TEXT_OUTPUT_PROTOCOL *StdErr;
     void *RuntimeServices;
-    void *BootServices;
+    EFI_BOOT_SERVICES *BootServices;
     UINTN NumberOfTableEntries;
     void *ConfigurationTable;
 } EFI_SYSTEM_TABLE;

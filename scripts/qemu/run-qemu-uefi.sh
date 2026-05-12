@@ -42,4 +42,5 @@ cp "$EFI_FILE" "$EFI_ROOT/EFI/BOOT/BOOTX64.EFI"
 
 "$QEMU_SYSTEM" \
     -bios "$OVMF_CODE" \
-    -drive format=raw,file=fat:rw:"$EFI_ROOT"
+    -drive format=raw,file=fat:rw:"$EFI_ROOT" \
+    -serial stdio
