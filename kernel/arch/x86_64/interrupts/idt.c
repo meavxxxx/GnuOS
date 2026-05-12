@@ -1,5 +1,6 @@
 #include <stdint.h>
 
+#include <gnuos/apic.h>
 #include <gnuos/interrupts.h>
 #include <gnuos/keyboard.h>
 #include <gnuos/panic.h>
@@ -116,6 +117,12 @@ __attribute__((interrupt)) static void isr_irq1_keyboard(struct interrupt_frame 
     pic_send_eoi(1);
 }
 
+__attribute__((interrupt)) static void isr_apic_timer(struct interrupt_frame *f)
+{
+    (void)f;
+    apic_timer_on_irq();
+}
+
 #define DEFINE_IRQ_ISR(name, irq_line)                                            \
     __attribute__((interrupt)) static void name(struct interrupt_frame *f)        \
     {                                                                              \
@@ -199,6 +206,7 @@ void x86_64_idt_init(void)
     idt_set_gate((uint8_t)(IRQ_BASE + 13U), (uintptr_t)isr_irq13);
     idt_set_gate((uint8_t)(IRQ_BASE + 14U), (uintptr_t)isr_irq14);
     idt_set_gate((uint8_t)(IRQ_BASE + 15U), (uintptr_t)isr_irq15);
+    idt_set_gate(APIC_TIMER_VECTOR, (uintptr_t)isr_apic_timer);
 
     g_idtr.limit = (uint16_t)(sizeof(g_idt) - 1U);
     g_idtr.base = (uint64_t)(uintptr_t)&g_idt[0];

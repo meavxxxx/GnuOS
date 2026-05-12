@@ -152,7 +152,7 @@ and a full userland based on GNU tooling.
 - [x] APIC / xAPIC / x2APIC setup
 - [x] Basic VGA/serial debug output (`kprintf`)
 - [x] ACPI initialization (RSDP, MADT, FADT parsing)
-- [ ] HPET / APIC timer initialization
+- [x] HPET / APIC timer initialization
 
 #### 1.3 Physical Memory Management
 

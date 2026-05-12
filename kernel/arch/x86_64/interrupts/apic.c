@@ -2,6 +2,7 @@
 
 #include <gnuos/apic.h>
 #include <gnuos/msr.h>
+#include <gnuos/pit.h>
 #include <gnuos/serial.h>
 #include <gnuos/vmm.h>
 
@@ -20,13 +21,25 @@
 #define APIC_REG_ID 0x20U
 #define APIC_REG_SPURIOUS 0xF0U
 #define APIC_REG_EOI 0xB0U
+#define APIC_REG_LVT_TIMER 0x320U
+#define APIC_REG_TIMER_INITIAL_COUNT 0x380U
+#define APIC_REG_TIMER_CURRENT_COUNT 0x390U
+#define APIC_REG_TIMER_DIVIDE_CONFIG 0x3E0U
 
 #define APIC_SPURIOUS_VECTOR 0xFFU
 #define APIC_SPURIOUS_SW_ENABLE (1U << 8U)
+#define APIC_LVT_TIMER_PERIODIC (1U << 17U)
+#define APIC_LVT_MASKED (1U << 16U)
+#define APIC_TIMER_DIVIDE_BY_16 0x3U
+
+#define APIC_TIMER_CALIBRATION_PIT_TICKS 10U
+#define APIC_TIMER_MIN_CALIBRATED_COUNT 128U
 
 static apic_mode_t g_apic_mode;
 static uint64_t g_apic_base_phys;
 static uint32_t g_apic_id;
+static uint64_t g_apic_timer_ticks;
+static uint8_t g_apic_timer_ready;
 
 static void cpuid_read(
     uint32_t leaf,
@@ -127,6 +140,8 @@ int apic_init(void)
     g_apic_mode = APIC_MODE_DISABLED;
     g_apic_base_phys = 0U;
     g_apic_id = 0U;
+    g_apic_timer_ticks = 0U;
+    g_apic_timer_ready = 0U;
 
     cpuid_read(CPUID_LEAF_FEATURES, 0U, &eax, &ebx, &ecx, &edx);
     has_apic = ((edx & CPUID_FEAT_EDX_APIC) != 0U) ? 1U : 0U;
@@ -208,3 +223,96 @@ void apic_send_eoi(void)
     apic_write_reg(APIC_REG_EOI, 0U);
 }
 
+static uint32_t apic_timer_calibrate_one_tick_count(void)
+{
+    uint64_t start_tick = 0U;
+    uint32_t elapsed = 0U;
+
+    apic_write_reg(APIC_REG_TIMER_DIVIDE_CONFIG, APIC_TIMER_DIVIDE_BY_16);
+    apic_write_reg(APIC_REG_LVT_TIMER, APIC_LVT_MASKED | APIC_TIMER_VECTOR);
+    apic_write_reg(APIC_REG_TIMER_INITIAL_COUNT, 0xFFFFFFFFU);
+
+    start_tick = pit_ticks();
+    while (pit_ticks() == start_tick) {
+        __asm__ volatile("hlt");
+    }
+
+    start_tick = pit_ticks();
+    while ((pit_ticks() - start_tick) < APIC_TIMER_CALIBRATION_PIT_TICKS) {
+        __asm__ volatile("hlt");
+    }
+
+    elapsed = 0xFFFFFFFFU - apic_read_reg(APIC_REG_TIMER_CURRENT_COUNT);
+    apic_write_reg(APIC_REG_TIMER_INITIAL_COUNT, 0U);
+    return elapsed;
+}
+
+int apic_timer_init(uint8_t vector, uint32_t target_hz)
+{
+    uint32_t elapsed = 0U;
+    uint32_t periodic_count = 0U;
+
+    if (g_apic_mode == APIC_MODE_DISABLED) {
+        return 0;
+    }
+    if (vector < 32U) {
+        return 0;
+    }
+
+    if (target_hz == 0U) {
+        target_hz = 100U;
+    }
+
+    elapsed = apic_timer_calibrate_one_tick_count();
+    if (elapsed < APIC_TIMER_MIN_CALIBRATED_COUNT) {
+        serial_write("GNU OS: APIC timer calibration failed.\n");
+        return 0;
+    }
+
+    periodic_count = elapsed / APIC_TIMER_CALIBRATION_PIT_TICKS;
+    periodic_count = periodic_count * 100U / target_hz;
+    if (periodic_count == 0U) {
+        periodic_count = 1U;
+    }
+
+    g_apic_timer_ticks = 0U;
+
+    apic_write_reg(APIC_REG_TIMER_DIVIDE_CONFIG, APIC_TIMER_DIVIDE_BY_16);
+    apic_write_reg(
+        APIC_REG_LVT_TIMER,
+        APIC_LVT_MASKED | APIC_LVT_TIMER_PERIODIC | (uint32_t)vector);
+    apic_write_reg(APIC_REG_TIMER_INITIAL_COUNT, periodic_count);
+    g_apic_timer_ready = 1U;
+    apic_write_reg(APIC_REG_LVT_TIMER, APIC_LVT_TIMER_PERIODIC | (uint32_t)vector);
+    serial_write("GNU OS: APIC timer initialized vector=0x");
+    serial_write_hex64((uint64_t)vector);
+    serial_write(" target_hz=0x");
+    serial_write_hex64((uint64_t)target_hz);
+    serial_write(" count=0x");
+    serial_write_hex64((uint64_t)periodic_count);
+    serial_write("\n");
+    return 1;
+}
+
+void apic_timer_on_irq(void)
+{
+    if (g_apic_timer_ready) {
+        g_apic_timer_ticks++;
+    }
+
+    apic_send_eoi();
+}
+
+uint64_t apic_timer_ticks(void)
+{
+    return g_apic_timer_ticks;
+}
+
+uint32_t apic_timer_current_count(void)
+{
+    if (!g_apic_timer_ready) {
+        return 0U;
+    }
+
+    return apic_read_reg(APIC_REG_TIMER_CURRENT_COUNT);
+}

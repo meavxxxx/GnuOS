@@ -474,6 +474,7 @@ void kmain(uint64_t boot_magic, uint64_t boot_info_addr)
     pic_clear_mask(1U);
     pit_init(100U);
     x86_64_interrupts_enable();
+    (void)apic_timer_init(APIC_TIMER_VECTOR, 100U);
 
     vga_write("GNU OS kernel bootstrap\n", color);
     vga_write("Phase 1.5 in progress: scheduler bootstrap online.\n", 0x0F);
@@ -775,6 +776,10 @@ void kmain(uint64_t boot_magic, uint64_t boot_info_addr)
     }
 
     kprintf("GNU OS: timer interrupt path active, ticks=%u\n", pit_ticks());
+    kprintf(
+        "GNU OS: APIC timer ticks=%u current_count=0x%X\n",
+        apic_timer_ticks(),
+        (uint64_t)apic_timer_current_count());
     current_task = sched_current_task();
     if (current_task) {
         kprintf(
