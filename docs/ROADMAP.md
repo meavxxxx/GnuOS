@@ -848,13 +848,6 @@ docker run -it --rm -v $(pwd):/src gnuos-dev make ARCH=x86_64 all
 | Ядро / MMU | 🔴 Эксперт | C + asm, архитектура CPU |
 | Безопасность | 🔴 Эксперт | C, CVE, крипто |
 
-### Коммуникация
-
-- **Mailing list:** `gnuos-dev@gnu.org`
-- **IRC:** `#gnuos` на `irc.libera.chat`
-- **Трекер задач:** `https://savannah.gnu.org/projects/gnuos`
-- **Документация:** `https://gnuos.gnu.org/docs`
-
 ---
 
 ## Лицензирование
