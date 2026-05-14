@@ -40,6 +40,13 @@ function Invoke-WslBash {
     & wsl.exe -d $DistroName -- bash -lc $Command
 }
 
+function Test-WslGuiAvailable {
+    param([string]$DistroName)
+
+    & wsl.exe -d $DistroName -- bash -lc '[ -n "${DISPLAY:-}" ] || [ -n "${WAYLAND_DISPLAY:-}" ]'
+    return ($LASTEXITCODE -eq 0)
+}
+
 $kernelIsoPath = "build/$Arch/gnuos-$Arch.iso"
 if (-not $SkipBuild) {
     $primaryBuildCmd = "source ~/.profile >/dev/null 2>&1 || true; cd '$repoLinuxPathSafe' && make ARCH=$Arch $buildTargets"
@@ -58,8 +65,23 @@ if (-not $SkipBuild) {
     }
 }
 
+$runGui = -not $Headless
+if ($Gui) {
+    $runGui = $true
+}
+
+if ($runGui -and -not (Test-WslGuiAvailable -DistroName $Distro)) {
+    throw @"
+QEMU GUI window cannot be opened from WSL: DISPLAY/WAYLAND is not set.
+Install/enable WSLg (or X server), then retry.
+For now use: .\wsl-run-kernel.ps1 -Headless
+"@
+}
+
 $qemuCmd = "qemu-system-x86_64 -cdrom '$kernelIsoPath' -serial stdio"
-if ($Headless) {
+if ($runGui) {
+    $qemuCmd += " -display gtk"
+} else {
     $qemuCmd += " -display none"
 }
 if ($TimeoutSec -gt 0) {
