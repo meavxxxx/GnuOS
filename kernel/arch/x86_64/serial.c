@@ -1,8 +1,12 @@
 #include <stdint.h>
 
 #include <gnuos/io.h>
+#include <gnuos/serial.h>
 
 #define COM1_PORT 0x3F8
+
+static serial_mirror_callback_t g_serial_mirror_callback;
+static uint8_t g_serial_mirror_enabled;
 
 void serial_init(void)
 {
@@ -13,6 +17,16 @@ void serial_init(void)
     io_out8(COM1_PORT + 3, 0x03);
     io_out8(COM1_PORT + 2, 0xC7);
     io_out8(COM1_PORT + 4, 0x0B);
+}
+
+void serial_set_mirror_callback(serial_mirror_callback_t callback)
+{
+    g_serial_mirror_callback = callback;
+}
+
+void serial_set_mirror_enabled(uint8_t enabled)
+{
+    g_serial_mirror_enabled = enabled ? 1U : 0U;
 }
 
 static int serial_tx_ready(void)
@@ -26,6 +40,9 @@ void serial_write_char(char c)
     }
 
     io_out8(COM1_PORT, (uint8_t)c);
+    if (g_serial_mirror_enabled && g_serial_mirror_callback) {
+        g_serial_mirror_callback(c);
+    }
 }
 
 void serial_write(const char *message)

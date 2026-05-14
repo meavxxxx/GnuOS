@@ -28,6 +28,7 @@
 #define VGA_WIDTH 80
 #define VGA_HEIGHT 25
 #define VGA_MEMORY ((volatile uint16_t *)0xB8000)
+#define VGA_LOG_COLOR 0x07
 
 static uint8_t g_vga_row;
 static uint8_t g_vga_col;
@@ -294,6 +295,19 @@ static uint16_t vga_entry(char c, uint8_t color)
     return (uint16_t)c | ((uint16_t)color << 8U);
 }
 
+static void vga_scroll_one_line(uint8_t color)
+{
+    for (uint16_t y = 1U; y < VGA_HEIGHT; y++) {
+        for (uint16_t x = 0U; x < VGA_WIDTH; x++) {
+            VGA_MEMORY[(y - 1U) * VGA_WIDTH + x] = VGA_MEMORY[y * VGA_WIDTH + x];
+        }
+    }
+
+    for (uint16_t x = 0U; x < VGA_WIDTH; x++) {
+        VGA_MEMORY[(VGA_HEIGHT - 1U) * VGA_WIDTH + x] = vga_entry(' ', color);
+    }
+}
+
 static void vga_clear(uint8_t color)
 {
     for (uint16_t y = 0; y < VGA_HEIGHT; y++) {
@@ -308,14 +322,23 @@ static void vga_clear(uint8_t color)
 
 static void vga_putc(char c, uint8_t color)
 {
+    if (c == '\r') {
+        return;
+    }
+
     if (c == '\n') {
         g_vga_col = 0;
         g_vga_row++;
+        if (g_vga_row >= VGA_HEIGHT) {
+            vga_scroll_one_line(color);
+            g_vga_row = VGA_HEIGHT - 1U;
+        }
         return;
     }
 
     if (g_vga_row >= VGA_HEIGHT) {
-        g_vga_row = VGA_HEIGHT - 1;
+        vga_scroll_one_line(color);
+        g_vga_row = VGA_HEIGHT - 1U;
     }
 
     VGA_MEMORY[g_vga_row * VGA_WIDTH + g_vga_col] = vga_entry(c, color);
@@ -324,6 +347,10 @@ static void vga_putc(char c, uint8_t color)
     if (g_vga_col >= VGA_WIDTH) {
         g_vga_col = 0;
         g_vga_row++;
+        if (g_vga_row >= VGA_HEIGHT) {
+            vga_scroll_one_line(color);
+            g_vga_row = VGA_HEIGHT - 1U;
+        }
     }
 }
 
@@ -333,6 +360,11 @@ static void vga_write(const char *message, uint8_t color)
         vga_putc(*message, color);
         message++;
     }
+}
+
+static void vga_log_mirror_char(char c)
+{
+    vga_putc(c, VGA_LOG_COLOR);
 }
 
 void kmain(uint64_t boot_magic, uint64_t boot_info_addr)
@@ -389,6 +421,8 @@ void kmain(uint64_t boot_magic, uint64_t boot_info_addr)
     multiboot2_framebuffer_info_t framebuffer_info = {0};
 
     vga_clear(0x07);
+    serial_set_mirror_callback(vga_log_mirror_char);
+    serial_set_mirror_enabled(1U);
     serial_init();
     x86_64_idt_init();
 
@@ -790,6 +824,9 @@ void kmain(uint64_t boot_magic, uint64_t boot_info_addr)
             current_task->runtime_ticks,
             current_task->context_switches);
     }
+
+    serial_set_mirror_enabled(0U);
+    vga_write("Boot log mirror paused. Full live logs continue via serial.\n", 0x08);
 
 #if 0
     /* Optional bring-up test: should trigger #DE and halt in kpanic. */
