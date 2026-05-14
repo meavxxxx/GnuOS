@@ -12,15 +12,6 @@ header_start:
     .long MB2_HEADER_LEN
     .long MB2_CHECKSUM
 
-    /* Optional framebuffer request tag: 1024x768x32 preferred */
-    .align 8
-    .short 5
-    .short 1
-    .long 20
-    .long 1024
-    .long 768
-    .long 32
-
     /* End tag */
     .align 8
     .short 0
