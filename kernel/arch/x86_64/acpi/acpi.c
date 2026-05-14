@@ -216,6 +216,20 @@ static int acpi_find_sdt(
     return 0;
 }
 
+static uint32_t acpi_table_length(uint64_t table_phys_addr)
+{
+    const acpi_sdt_header_t *table = NULL;
+
+    if (table_phys_addr == 0U) {
+        return 0U;
+    }
+    if (!acpi_map_table(table_phys_addr, &table)) {
+        return 0U;
+    }
+
+    return table->length;
+}
+
 static uint64_t acpi_madt_lapic_addr(const acpi_madt_t *madt)
 {
     uint64_t lapic_addr = 0U;
@@ -285,6 +299,7 @@ int acpi_init(uint64_t boot_info_addr)
 
     g_acpi_info.revision = rsdp_v1->revision;
     g_acpi_info.rsdp_address = rsdp_addr;
+    g_acpi_info.rsdp_length = 20U;
     g_acpi_info.rsdt_address = rsdp_v1->rsdt_address;
 
     if (rsdp_v1->revision >= 2U) {
@@ -298,6 +313,7 @@ int acpi_init(uint64_t boot_info_addr)
             return 0;
         }
         g_acpi_info.xsdt_address = rsdp_v2->xsdt_address;
+        g_acpi_info.rsdp_length = rsdp_v2->length;
     }
 
     if (g_acpi_info.xsdt_address != 0U) {
@@ -312,6 +328,8 @@ int acpi_init(uint64_t boot_info_addr)
         serial_write("GNU OS: ACPI root SDT mapping/validation failed.\n");
         return 0;
     }
+    g_acpi_info.root_sdt_address = root_sdt_addr;
+    g_acpi_info.root_sdt_length = root_sdt->length;
 
     if (use_xsdt) {
         if (!acpi_sig_match(root_sdt->signature, ACPI_SIG_XSDT, 4U)) {
@@ -326,6 +344,9 @@ int acpi_init(uint64_t boot_info_addr)
     (void)acpi_find_sdt(root_sdt, use_xsdt, ACPI_SIG_MADT, &g_acpi_info.madt_address);
     (void)acpi_find_sdt(root_sdt, use_xsdt, ACPI_SIG_FADT, &g_acpi_info.fadt_address);
     (void)acpi_find_sdt(root_sdt, use_xsdt, ACPI_SIG_SRAT, &g_acpi_info.srat_address);
+    g_acpi_info.madt_length = acpi_table_length(g_acpi_info.madt_address);
+    g_acpi_info.fadt_length = acpi_table_length(g_acpi_info.fadt_address);
+    g_acpi_info.srat_length = acpi_table_length(g_acpi_info.srat_address);
 
     if (g_acpi_info.madt_address != 0U) {
         const acpi_sdt_header_t *madt_hdr = NULL;

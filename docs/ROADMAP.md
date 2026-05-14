@@ -159,7 +159,7 @@ and a full userland based on GNU tooling.
 - [x] Buddy physical page allocator
 - [x] E820 / UEFI memory map parsing
 - [x] NUMA (Non-Uniform Memory Access) support
-- [ ] Reserved memory regions for DMA, MMIO, ACPI
+- [x] Reserved memory regions for DMA, MMIO, ACPI
 - [ ] Memory usage statistics (`/proc/meminfo`-compatible)
 
 #### 1.4 Virtual Memory Manager (VMM)

@@ -29,6 +29,12 @@
 #define VGA_HEIGHT 25
 #define VGA_MEMORY ((volatile uint16_t *)0xB8000)
 #define VGA_LOG_COLOR 0x07
+#define DMA_LEGACY_WINDOW_END 0x01000000ULL
+
+typedef struct {
+    uint32_t total_size;
+    uint32_t reserved;
+} __attribute__((packed)) multiboot2_info_header_t;
 
 static uint8_t g_vga_row;
 static uint8_t g_vga_col;
@@ -367,6 +373,129 @@ static void vga_log_mirror_char(char c)
     vga_putc(c, VGA_LOG_COLOR);
 }
 
+static uint64_t clamp_end(uint64_t base, uint64_t size)
+{
+    if (base > (UINT64_MAX - size)) {
+        return UINT64_MAX;
+    }
+
+    return base + size;
+}
+
+static uint64_t framebuffer_size_bytes(const multiboot2_framebuffer_info_t *framebuffer)
+{
+    uint64_t pitch = 0U;
+    uint64_t height = 0U;
+
+    if (!framebuffer) {
+        return 0U;
+    }
+
+    pitch = framebuffer->pitch;
+    height = framebuffer->height;
+    if (pitch == 0U || height == 0U) {
+        return 0U;
+    }
+    if (pitch > (UINT64_MAX / height)) {
+        return 0U;
+    }
+
+    return pitch * height;
+}
+
+static void reserve_dma_low_window(uint64_t pmm_base, uint64_t pmm_size)
+{
+    uint64_t pmm_end = 0U;
+    uint64_t reserve_size = 0U;
+
+    if (pmm_size == 0U || pmm_base >= DMA_LEGACY_WINDOW_END) {
+        return;
+    }
+
+    pmm_end = clamp_end(pmm_base, pmm_size);
+    if (pmm_end > DMA_LEGACY_WINDOW_END) {
+        pmm_end = DMA_LEGACY_WINDOW_END;
+    }
+    if (pmm_end <= pmm_base) {
+        return;
+    }
+
+    reserve_size = pmm_end - pmm_base;
+    pmm_reserve_range(pmm_base, reserve_size);
+    kprintf(
+        "GNU OS: PMM reserved DMA low window 0x%X..0x%X\n",
+        pmm_base,
+        pmm_end);
+}
+
+static void reserve_multiboot_info(uint64_t boot_info_addr)
+{
+    const multiboot2_info_header_t *header =
+        (const multiboot2_info_header_t *)(uintptr_t)boot_info_addr;
+    uint64_t total_size = 0U;
+
+    if (boot_info_addr == 0U) {
+        return;
+    }
+    if (header->total_size < sizeof(multiboot2_info_header_t)) {
+        return;
+    }
+
+    total_size = header->total_size;
+    pmm_reserve_range(boot_info_addr, total_size);
+    kprintf(
+        "GNU OS: PMM reserved multiboot2 info 0x%X..0x%X\n",
+        boot_info_addr,
+        clamp_end(boot_info_addr, total_size));
+}
+
+static void reserve_framebuffer_mmio(
+    int have_framebuffer,
+    const multiboot2_framebuffer_info_t *framebuffer)
+{
+    uint64_t fb_size = 0U;
+
+    if (!have_framebuffer || !framebuffer) {
+        return;
+    }
+
+    fb_size = framebuffer_size_bytes(framebuffer);
+    if (fb_size == 0U) {
+        return;
+    }
+
+    pmm_reserve_range(framebuffer->address, fb_size);
+    kprintf(
+        "GNU OS: PMM reserved framebuffer MMIO 0x%X..0x%X\n",
+        framebuffer->address,
+        clamp_end(framebuffer->address, fb_size));
+}
+
+static void reserve_acpi_regions(void)
+{
+    acpi_info_t acpi_info;
+
+    if (!acpi_get_info(&acpi_info)) {
+        return;
+    }
+
+    pmm_reserve_range(acpi_info.rsdp_address, acpi_info.rsdp_length);
+    pmm_reserve_range(acpi_info.root_sdt_address, acpi_info.root_sdt_length);
+    pmm_reserve_range(acpi_info.madt_address, acpi_info.madt_length);
+    pmm_reserve_range(acpi_info.fadt_address, acpi_info.fadt_length);
+    pmm_reserve_range(acpi_info.srat_address, acpi_info.srat_length);
+    pmm_reserve_range((uint64_t)acpi_info.local_apic_address, MM_PAGE_SIZE);
+
+    kprintf(
+        "GNU OS: PMM reserved ACPI/MMIO ranges rsdp=0x%X root=0x%X madt=0x%X fadt=0x%X srat=0x%X lapic=0x%X\n",
+        acpi_info.rsdp_address,
+        acpi_info.root_sdt_address,
+        acpi_info.madt_address,
+        acpi_info.fadt_address,
+        acpi_info.srat_address,
+        (uint64_t)acpi_info.local_apic_address);
+}
+
 void kmain(uint64_t boot_magic, uint64_t boot_info_addr)
 {
     const uint8_t color = 0x0A;
@@ -464,11 +593,15 @@ void kmain(uint64_t boot_magic, uint64_t boot_info_addr)
     kernel_end = (uint64_t)(uintptr_t)&__kernel_end;
     kernel_size = kernel_end - kernel_start;
     pmm_reserve_range(kernel_start, kernel_size);
+    reserve_dma_low_window(pmm_base, pmm_size);
+    reserve_multiboot_info(boot_info_addr);
+    reserve_framebuffer_mmio(have_framebuffer, &framebuffer_info);
 
     if (!vmm_init()) {
         kpanic("failed to initialize vmm");
     }
     (void)acpi_init(boot_info_addr);
+    reserve_acpi_regions();
     numa_init(pmm_base, pmm_size);
     (void)apic_init();
 
