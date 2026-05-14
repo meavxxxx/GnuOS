@@ -10,6 +10,7 @@ typedef struct {
     uint64_t xsdt_address;
     uint64_t madt_address;
     uint64_t fadt_address;
+    uint64_t srat_address;
     uint32_t local_apic_address;
 } acpi_info_t;
 
@@ -17,4 +18,3 @@ int acpi_init(uint64_t boot_info_addr);
 int acpi_get_info(acpi_info_t *out_info);
 
 #endif
-

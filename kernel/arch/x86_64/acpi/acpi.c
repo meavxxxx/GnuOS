@@ -13,6 +13,7 @@
 #define ACPI_SIG_XSDT "XSDT"
 #define ACPI_SIG_MADT "APIC"
 #define ACPI_SIG_FADT "FACP"
+#define ACPI_SIG_SRAT "SRAT"
 
 #define ACPI_MADT_TYPE_LOCAL_APIC_ADDR_OVERRIDE 5U
 
@@ -324,6 +325,7 @@ int acpi_init(uint64_t boot_info_addr)
 
     (void)acpi_find_sdt(root_sdt, use_xsdt, ACPI_SIG_MADT, &g_acpi_info.madt_address);
     (void)acpi_find_sdt(root_sdt, use_xsdt, ACPI_SIG_FADT, &g_acpi_info.fadt_address);
+    (void)acpi_find_sdt(root_sdt, use_xsdt, ACPI_SIG_SRAT, &g_acpi_info.srat_address);
 
     if (g_acpi_info.madt_address != 0U) {
         const acpi_sdt_header_t *madt_hdr = NULL;
@@ -335,7 +337,7 @@ int acpi_init(uint64_t boot_info_addr)
     }
 
     kprintf(
-        "GNU OS: ACPI initialized rev=%u tag_rev=%u rsdp=0x%X root=%s@0x%X madt=0x%X fadt=0x%X lapic=0x%X\n",
+        "GNU OS: ACPI initialized rev=%u tag_rev=%u rsdp=0x%X root=%s@0x%X madt=0x%X fadt=0x%X srat=0x%X lapic=0x%X\n",
         (uint64_t)g_acpi_info.revision,
         (uint64_t)rsdp_revision_from_tag,
         g_acpi_info.rsdp_address,
@@ -343,6 +345,7 @@ int acpi_init(uint64_t boot_info_addr)
         root_sdt_addr,
         g_acpi_info.madt_address,
         g_acpi_info.fadt_address,
+        g_acpi_info.srat_address,
         (uint64_t)g_acpi_info.local_apic_address);
 
     if (g_acpi_info.madt_address == 0U || g_acpi_info.fadt_address == 0U) {

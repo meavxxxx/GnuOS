@@ -9,6 +9,7 @@
 #include <gnuos/dma.h>
 #include <gnuos/mm.h>
 #include <gnuos/multiboot2.h>
+#include <gnuos/numa.h>
 #include <gnuos/ipc.h>
 #include <gnuos/panic.h>
 #include <gnuos/pci.h>
@@ -434,6 +435,7 @@ void kmain(uint64_t boot_magic, uint64_t boot_info_addr)
         kpanic("failed to initialize vmm");
     }
     (void)acpi_init(boot_info_addr);
+    numa_init(pmm_base, pmm_size);
     (void)apic_init();
 
     sched_init();
