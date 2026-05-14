@@ -7,6 +7,7 @@
 #include <gnuos/interrupts.h>
 #include <gnuos/keyboard.h>
 #include <gnuos/dma.h>
+#include <gnuos/meminfo.h>
 #include <gnuos/mm.h>
 #include <gnuos/multiboot2.h>
 #include <gnuos/numa.h>
@@ -772,6 +773,8 @@ void kmain(uint64_t boot_magic, uint64_t boot_info_addr)
         "GNU OS: syscall selftests passed=%u failed=%u\n",
         syscall_selftest_passed,
         syscall_selftest_failed);
+    kprintf("GNU OS: /proc/meminfo snapshot follows:\n");
+    meminfo_log_snapshot();
 
     ipc_boot_channel = ipc_channel_create("boot-log");
     if (ipc_boot_channel >= 0) {
@@ -958,8 +961,8 @@ void kmain(uint64_t boot_magic, uint64_t boot_info_addr)
             current_task->context_switches);
     }
 
-    serial_set_mirror_enabled(0U);
-    vga_write("Boot log mirror paused. Full live logs continue via serial.\n", 0x08);
+    vga_write("Boot/runtime logs mirrored to VGA + serial.\n", 0x0A);
+    serial_write("GNU OS: VGA mirror kept active for runtime logs.\n");
 
 #if 0
     /* Optional bring-up test: should trigger #DE and halt in kpanic. */

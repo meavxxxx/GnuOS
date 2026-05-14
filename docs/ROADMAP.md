@@ -160,7 +160,7 @@ and a full userland based on GNU tooling.
 - [x] E820 / UEFI memory map parsing
 - [x] NUMA (Non-Uniform Memory Access) support
 - [x] Reserved memory regions for DMA, MMIO, ACPI
-- [ ] Memory usage statistics (`/proc/meminfo`-compatible)
+- [x] Memory usage statistics (`/proc/meminfo`-compatible)
 
 #### 1.4 Virtual Memory Manager (VMM)
 

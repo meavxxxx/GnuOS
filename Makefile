@@ -89,6 +89,7 @@ KERNEL_C_SOURCES := \
 	kernel/ipc/ipc.c \
 	kernel/ipc/shm.c \
 	kernel/mm/pmm.c \
+	kernel/mm/meminfo.c \
 	kernel/mm/numa.c \
 	kernel/mm/uaccess.c \
 	kernel/mm/vmm.c \
