@@ -156,7 +156,7 @@ and a full userland based on GNU tooling.
 
 #### 1.3 Physical Memory Management
 
-- [ ] Buddy physical page allocator
+- [x] Buddy physical page allocator
 - [x] E820 / UEFI memory map parsing
 - [ ] NUMA (Non-Uniform Memory Access) support
 - [ ] Reserved memory regions for DMA, MMIO, ACPI
