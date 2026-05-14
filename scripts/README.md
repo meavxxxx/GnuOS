@@ -14,7 +14,7 @@ This directory contains automation for development, CI, toolchains, and local ru
 
 - Full local setup: `scripts/dev/setup-dev.ps1`
 - WSL make wrapper (defaults to full build): `scripts/dev/wsl-make.ps1`
-- WSL kernel run (full build + QEMU): `scripts/dev/wsl-run-kernel.ps1`
+- Kernel run wrapper (WSL QEMU or Windows QEMU): `scripts/dev/wsl-run-kernel.ps1`
 - CI static analysis: `scripts/ci/static-analysis.sh`
 - CI coverage: `scripts/ci/coverage.sh`
 - CI fuzz smoke: `scripts/ci/fuzz.sh`

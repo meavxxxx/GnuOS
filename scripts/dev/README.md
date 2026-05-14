@@ -22,6 +22,9 @@
 .\scripts\dev\wsl-make.ps1 run            # make run
 .\scripts\dev\wsl-run-kernel.ps1          # GUI window by default
 .\scripts\dev\wsl-run-kernel.ps1 -Headless # serial-only mode
+.\scripts\dev\wsl-run-kernel.ps1 -QemuHost windows
+# Windows QEMU + serial in terminal + serial log file:
+.\scripts\dev\wsl-run-kernel.ps1 -QemuHost windows -SerialLogPath .\build\x86_64\serial.log
 
 # Docker
 .\scripts\dev\docker-make.ps1 -RebuildImage
