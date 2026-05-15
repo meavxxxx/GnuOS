@@ -4,6 +4,7 @@
 #include <gnuos/mm.h>
 #include <gnuos/uaccess.h>
 #include <gnuos/vmm.h>
+#include <gnuos/x86_64_hardening.h>
 
 #define UACCESS_USER_MAX_VA 0x00007FFFFFFFFFFFULL
 
@@ -75,9 +76,11 @@ int uaccess_copy_from_user(void *dst, uint64_t user_src, uint64_t size)
         return -1;
     }
 
+    x86_64_uaccess_begin();
     for (uint64_t index = 0U; index < size; index++) {
         dst_bytes[index] = src_bytes[index];
     }
+    x86_64_uaccess_end();
 
     return 0;
 }
@@ -94,9 +97,11 @@ int uaccess_copy_to_user(uint64_t user_dst, const void *src, uint64_t size)
         return -1;
     }
 
+    x86_64_uaccess_begin();
     for (uint64_t index = 0U; index < size; index++) {
         dst_bytes[index] = src_bytes[index];
     }
+    x86_64_uaccess_end();
 
     return 0;
 }

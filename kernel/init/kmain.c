@@ -24,7 +24,9 @@
 #include <gnuos/shm.h>
 #include <gnuos/spinlock.h>
 #include <gnuos/syscall.h>
+#include <gnuos/uaccess.h>
 #include <gnuos/vmm.h>
+#include <gnuos/x86_64_hardening.h>
 
 #define VGA_WIDTH 80
 #define VGA_HEIGHT 25
@@ -577,6 +579,7 @@ void kmain(uint64_t boot_magic, uint64_t boot_info_addr)
     if (!vmm_init()) {
         kpanic("failed to initialize vmm");
     }
+    x86_64_hardening_init();
     vmm_get_kernel_layout(&kernel_vmm_layout);
     kprintf(
         "GNU OS: KASLR-ready layout window=0x%X+0x%X slide=0x%X heap=0x%X..0x%X\n",
@@ -675,19 +678,27 @@ void kmain(uint64_t boot_magic, uint64_t boot_info_addr)
                 syscall_user_page_virt,
                 (uint64_t)(uintptr_t)syscall_user_page,
                 VMM_MAP_USER | VMM_MAP_WRITABLE)) {
-            volatile uint64_t *user_tid_ptr =
-                (volatile uint64_t *)(uintptr_t)syscall_user_page_virt;
-            *user_tid_ptr = UINT64_MAX;
+            uint64_t user_seed = UINT64_MAX;
             syscall_user_page_mapped = 1;
-            syscall_userptr_good_result = syscall_dispatch(
-                SYS_GETTID_USER,
-                syscall_user_page_virt,
-                0U,
-                0U,
-                0U,
-                0U,
-                0U);
-            syscall_user_tid_value = *user_tid_ptr;
+            if (uaccess_copy_to_user(syscall_user_page_virt, &user_seed, sizeof(user_seed)) == 0) {
+                syscall_userptr_good_result = syscall_dispatch(
+                    SYS_GETTID_USER,
+                    syscall_user_page_virt,
+                    0U,
+                    0U,
+                    0U,
+                    0U,
+                    0U);
+                if (uaccess_copy_from_user(
+                        &syscall_user_tid_value,
+                        syscall_user_page_virt,
+                        sizeof(syscall_user_tid_value)) != 0) {
+                    syscall_user_tid_value = UINT64_MAX;
+                }
+            } else {
+                syscall_userptr_good_result = -14LL;
+                syscall_user_tid_value = UINT64_MAX;
+            }
         } else {
             pmm_free_page(syscall_user_page);
             syscall_user_page = NULL;

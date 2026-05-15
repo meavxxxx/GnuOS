@@ -171,7 +171,7 @@ and a full userland based on GNU tooling.
 - [ ] Copy-on-Write (CoW) for `fork()`
 - [ ] Demand paging
 - [ ] `mmap()` / `munmap()` / `mprotect()`
-- [ ] SMEP / SMAP / NX support
+- [x] SMEP / SMAP / NX support
 
 #### 1.5 Process Scheduler
 
