@@ -165,7 +165,7 @@ and a full userland based on GNU tooling.
 #### 1.4 Virtual Memory Manager (VMM)
 
 - [x] 4-level page tables (PML4) for `x86_64`
-- [ ] Kernel virtual address space layout (KASLR-ready)
+- [x] Kernel virtual address space layout (KASLR-ready)
 - [x] Virtual address space allocator
 - [x] Huge pages support (2 MB, 1 GB)
 - [ ] Copy-on-Write (CoW) for `fork()`

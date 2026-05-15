@@ -16,10 +16,17 @@
 #define VMM_HUGE2M_SIZE (2ULL * 1024ULL * 1024ULL)
 #define VMM_HUGE2M_OFFSET_MASK (VMM_HUGE2M_SIZE - 1ULL)
 #define VMM_HUGE2M_BASE_MASK (VMM_PHYS_MASK & ~VMM_HUGE2M_OFFSET_MASK)
-#define VMM_KERNEL_HEAP_BASE 0x0000000040000000ULL
+#define VMM_KASLR_WINDOW_BASE 0x0000000040000000ULL
+#define VMM_KASLR_WINDOW_SIZE 0x0000000020000000ULL
+#define VMM_KASLR_SLIDE_GRANULARITY VMM_HUGE2M_SIZE
+#define VMM_KERNEL_IMAGE_MAX_SIZE 0x0000000004000000ULL
+#define VMM_KERNEL_HEAP_GUARD_SIZE VMM_HUGE2M_SIZE
+#define VMM_KERNEL_HEAP_SIZE 0x0000000010000000ULL
 
 static uint64_t *g_pml4;
-static uint64_t g_kernel_heap_next = VMM_KERNEL_HEAP_BASE;
+static vmm_kernel_layout_t g_kernel_layout;
+static uint64_t g_kernel_heap_next;
+static uint64_t g_kernel_heap_limit;
 
 static uint16_t vmm_pml4_index(uint64_t virt_addr)
 {
@@ -49,6 +56,41 @@ static void vmm_invalidate_tlb(uint64_t virt_addr)
 static uint64_t *vmm_entry_to_table(uint64_t entry)
 {
     return (uint64_t *)(uintptr_t)(entry & VMM_PHYS_MASK);
+}
+
+static int vmm_range_end(uint64_t base, uint64_t size, uint64_t *out_end)
+{
+    if (!out_end) {
+        return 0;
+    }
+    if (base > UINT64_MAX - size) {
+        return 0;
+    }
+
+    *out_end = base + size;
+    return 1;
+}
+
+static void vmm_log_kernel_layout(void)
+{
+    serial_write("GNU OS: VMM layout kaslr_window_base=");
+    serial_write_hex64(g_kernel_layout.kaslr_window_base);
+    serial_write(" kaslr_window_size=");
+    serial_write_hex64(g_kernel_layout.kaslr_window_size);
+    serial_write(" kaslr_slide=");
+    serial_write_hex64(g_kernel_layout.kaslr_slide);
+    serial_write(" slide_step=");
+    serial_write_hex64(VMM_KASLR_SLIDE_GRANULARITY);
+    serial_write("\n");
+    serial_write("GNU OS: VMM layout kernel_image_base=");
+    serial_write_hex64(g_kernel_layout.kernel_image_base);
+    serial_write(" kernel_image_size=");
+    serial_write_hex64(g_kernel_layout.kernel_image_size);
+    serial_write(" kernel_heap_base=");
+    serial_write_hex64(g_kernel_layout.kernel_heap_base);
+    serial_write(" kernel_heap_size=");
+    serial_write_hex64(g_kernel_layout.kernel_heap_size);
+    serial_write("\n");
 }
 
 static uint64_t vmm_entry_to_map_flags(uint64_t entry)
@@ -216,6 +258,7 @@ static int vmm_walk_to_pt(
 
 int vmm_init(void)
 {
+    uint64_t heap_base = 0U;
     uint64_t cr3 = 0;
     __asm__ volatile("mov %%cr3, %0" : "=r"(cr3));
     g_pml4 = (uint64_t *)(uintptr_t)(cr3 & VMM_PHYS_MASK);
@@ -224,9 +267,35 @@ int vmm_init(void)
         return 0;
     }
 
+    g_kernel_layout.kaslr_window_base = VMM_KASLR_WINDOW_BASE;
+    g_kernel_layout.kaslr_window_size = VMM_KASLR_WINDOW_SIZE;
+    g_kernel_layout.kaslr_slide = 0U;
+    g_kernel_layout.kernel_image_base =
+        g_kernel_layout.kaslr_window_base + g_kernel_layout.kaslr_slide;
+    g_kernel_layout.kernel_image_size = VMM_KERNEL_IMAGE_MAX_SIZE;
+    if (!vmm_range_end(
+            g_kernel_layout.kernel_image_base,
+            g_kernel_layout.kernel_image_size,
+            &heap_base)) {
+        return 0;
+    }
+    if (!vmm_range_end(heap_base, VMM_KERNEL_HEAP_GUARD_SIZE, &heap_base)) {
+        return 0;
+    }
+    g_kernel_layout.kernel_heap_base = heap_base;
+    g_kernel_layout.kernel_heap_size = VMM_KERNEL_HEAP_SIZE;
+    if (!vmm_range_end(
+            g_kernel_layout.kernel_heap_base,
+            g_kernel_layout.kernel_heap_size,
+            &g_kernel_heap_limit)) {
+        return 0;
+    }
+    g_kernel_heap_next = g_kernel_layout.kernel_heap_base;
+
     serial_write("GNU OS: VMM initialized, CR3=");
     serial_write_hex64(cr3 & VMM_PHYS_MASK);
     serial_write("\n");
+    vmm_log_kernel_layout();
     return 1;
 }
 
@@ -384,6 +453,9 @@ void *vmm_alloc_kernel_pages(uint64_t page_count, uint64_t flags)
     if (page_count == 0) {
         return NULL;
     }
+    if (!g_pml4) {
+        return NULL;
+    }
 
     uint64_t start = g_kernel_heap_next;
     uint64_t requested_bytes = page_count * MM_PAGE_SIZE;
@@ -396,6 +468,10 @@ void *vmm_alloc_kernel_pages(uint64_t page_count, uint64_t flags)
     }
 
     uint64_t expected_end = start + requested_bytes;
+    if (start < g_kernel_layout.kernel_heap_base || expected_end > g_kernel_heap_limit) {
+        serial_write("GNU OS: VMM kernel heap exhausted.\n");
+        return NULL;
+    }
     uint64_t current = start;
 
     for (uint64_t i = 0; i < page_count; i++) {
@@ -425,4 +501,13 @@ void *vmm_alloc_kernel_pages(uint64_t page_count, uint64_t flags)
 
     g_kernel_heap_next = current;
     return (void *)(uintptr_t)start;
+}
+
+void vmm_get_kernel_layout(vmm_kernel_layout_t *out_layout)
+{
+    if (!out_layout) {
+        return;
+    }
+
+    *out_layout = g_kernel_layout;
 }

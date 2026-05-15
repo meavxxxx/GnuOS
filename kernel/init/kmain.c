@@ -538,6 +538,7 @@ void kmain(uint64_t boot_magic, uint64_t boot_info_addr)
     uint64_t syscall_selftest_failed = 0U;
     uint8_t syscall_fastpath_ready = 0U;
     uint64_t syscall_user_page_virt = 0x0000000080000000ULL;
+    vmm_kernel_layout_t kernel_vmm_layout = {0};
     void *syscall_user_page = NULL;
     int syscall_user_page_mapped = 0;
     task_t *current_task = NULL;
@@ -601,6 +602,14 @@ void kmain(uint64_t boot_magic, uint64_t boot_info_addr)
     if (!vmm_init()) {
         kpanic("failed to initialize vmm");
     }
+    vmm_get_kernel_layout(&kernel_vmm_layout);
+    kprintf(
+        "GNU OS: KASLR-ready layout window=0x%X+0x%X slide=0x%X heap=0x%X..0x%X\n",
+        kernel_vmm_layout.kaslr_window_base,
+        kernel_vmm_layout.kaslr_window_size,
+        kernel_vmm_layout.kaslr_slide,
+        kernel_vmm_layout.kernel_heap_base,
+        kernel_vmm_layout.kernel_heap_base + kernel_vmm_layout.kernel_heap_size);
     (void)acpi_init(boot_info_addr);
     reserve_acpi_regions();
     numa_init(pmm_base, pmm_size);

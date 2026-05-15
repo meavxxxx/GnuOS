@@ -6,7 +6,7 @@
 4. CPU exceptions route to `kpanic_exception()` with register dump over serial.
 5. Multiboot memory map is parsed and used to seed a bootstrap PMM allocator.
 6. Kernel memory range is reserved in PMM to avoid self-overwrite.
-7. VMM bootstrap attaches to current PML4 (`CR3`) and supports 4K map/unmap.
+7. VMM bootstrap attaches to current PML4 (`CR3`), defines a KASLR-ready VA layout window, and supports 4K map/unmap.
 8. Kernel virtual allocator maps pages from PMM in a dedicated VA region.
 9. Large (2 MiB) bootstrap mappings can be split into 4K tables on demand.
 10. Scheduler bootstrap initializes ready queue and creates idle task.
