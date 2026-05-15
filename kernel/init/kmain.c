@@ -145,11 +145,6 @@ static void demo_rcu_reclaim_callback(rcu_head_t *head)
     spinlock_lock(&g_demo_rcu_pool_lock);
     node->in_use = 0U;
     spinlock_unlock(&g_demo_rcu_pool_lock);
-
-    kprintf(
-        "GNU OS: rcu reclaimed generation=%u completed=%u\n",
-        node->generation,
-        rcu_callbacks_completed() + 1U);
 }
 
 static void demo_rcu_reader_entry(void *arg)
@@ -165,18 +160,10 @@ static void demo_rcu_reader_entry(void *arg)
         last_tick = pit_ticks();
         rcu_read_lock();
         demo_rcu_node_t *current = rcu_dereference(g_demo_rcu_current);
-        uint64_t generation = current ? current->generation : 0U;
+        (void)current;
         rcu_read_unlock();
 
         reader->reads++;
-        if ((reader->reads % 4U) == 0U) {
-            kprintf(
-                "GNU OS: %s reads=%u generation=%u readers=%u\n",
-                reader->name,
-                reader->reads,
-                generation,
-                rcu_reader_count());
-        }
 
         sched_yield();
     }
@@ -196,10 +183,6 @@ static void demo_rcu_updater_entry(void *arg)
         demo_rcu_node_t *next = demo_rcu_alloc_node();
         if (!next) {
             updater->dropped++;
-            kprintf(
-                "GNU OS: %s pool exhausted dropped=%u\n",
-                updater->name,
-                updater->dropped);
             sched_yield();
             continue;
         }
@@ -212,14 +195,6 @@ static void demo_rcu_updater_entry(void *arg)
         if (old) {
             call_rcu(&old->rcu_head, demo_rcu_reclaim_callback);
         }
-
-        kprintf(
-            "GNU OS: %s published=%u generation=%u queued=%u completed=%u\n",
-            updater->name,
-            updater->published,
-            next->generation,
-            rcu_callbacks_queued(),
-            rcu_callbacks_completed());
         sched_yield();
     }
 }
