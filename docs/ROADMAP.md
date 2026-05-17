@@ -177,7 +177,7 @@ and a full userland based on GNU tooling.
 
 - [x] Core structures: TCB, PCB
 - [x] Preemptive multitasking
-- [ ] CFS (Completely Fair Scheduler)
+- [x] CFS (Completely Fair Scheduler)
 - [ ] Scheduling priorities and classes (`SCHED_FIFO`, `SCHED_RR`, `SCHED_OTHER`)
 - [ ] SMP load balancing across CPUs
 - [ ] Kernel/user context save and restore

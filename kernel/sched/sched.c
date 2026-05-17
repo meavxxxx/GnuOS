@@ -30,6 +30,8 @@ static uint64_t g_sched_ticks;
 static volatile uint8_t g_need_resched;
 static uint64_t g_preempt_switches;
 static uint8_t g_preempt_log_emitted;
+static uint64_t g_cfs_min_vruntime;
+static uint8_t g_sched_trace_budget;
 
 static uint64_t sched_irq_save(void)
 {
@@ -145,28 +147,75 @@ static task_t *sched_alloc_task_slot(uint16_t *out_index)
 
 static int sched_pick_next_ready(uint16_t *out_index)
 {
+    uint16_t best_index = SCHED_TASK_INDEX_NONE;
+    uint16_t attempts = 0;
+    uint16_t kept[SCHED_READY_QUEUE_CAPACITY];
+    uint16_t kept_count = 0;
+
     if (!out_index) {
         return 0;
     }
 
-    uint16_t attempts = g_ready_size;
+    for (uint16_t i = 0; i < SCHED_MAX_TASKS; i++) {
+        task_t *candidate = &g_tasks[i];
+        task_t *best = NULL;
+
+        if (candidate->state != TASK_READY) {
+            continue;
+        }
+
+        if (best_index == SCHED_TASK_INDEX_NONE) {
+            best_index = i;
+            continue;
+        }
+
+        best = &g_tasks[best_index];
+        if (candidate->vruntime < best->vruntime ||
+            (candidate->vruntime == best->vruntime && candidate->tid < best->tid)) {
+            best_index = i;
+        }
+    }
+
+    if (best_index == SCHED_TASK_INDEX_NONE) {
+        return 0;
+    }
+
+    attempts = g_ready_size;
     while (attempts-- > 0U) {
         uint16_t candidate = 0;
         if (!sched_dequeue_task(&candidate)) {
-            return 0;
+            break;
+        }
+
+        if (candidate == best_index) {
+            continue;
         }
 
         if (candidate >= SCHED_MAX_TASKS) {
             continue;
         }
 
-        if (g_tasks[candidate].state == TASK_READY) {
-            *out_index = candidate;
-            return 1;
+        if (g_tasks[candidate].state != TASK_READY) {
+            continue;
+        }
+
+        if (kept_count < SCHED_READY_QUEUE_CAPACITY) {
+            kept[kept_count++] = candidate;
         }
     }
 
-    return 0;
+    g_ready_head = 0;
+    g_ready_tail = 0;
+    g_ready_size = 0;
+
+    for (uint16_t i = 0; i < kept_count; i++) {
+        if (!sched_enqueue_task(kept[i])) {
+            return 0;
+        }
+    }
+
+    *out_index = best_index;
+    return 1;
 }
 
 static void sched_reset_task(task_t *task)
@@ -182,6 +231,7 @@ static void sched_reset_task(task_t *task)
     task->entry = NULL;
     task->arg = NULL;
     task->runtime_ticks = 0;
+    task->vruntime = 0;
     task->context_switches = 0;
     task->context.rsp = 0;
     task->context.rbx = 0;
@@ -256,6 +306,8 @@ void sched_init(void)
     g_need_resched = 0;
     g_preempt_switches = 0;
     g_preempt_log_emitted = 0;
+    g_cfs_min_vruntime = 0;
+    g_sched_trace_budget = 8U;
 
     sched_reset_task(&g_bootstrap_task);
     g_bootstrap_task.tid = 0;
@@ -268,6 +320,7 @@ void sched_init(void)
     sched_irq_restore(irq_flags);
 
     serial_write("GNU OS: scheduler initialized.\n");
+    serial_write("GNU OS: scheduler policy=CFS vruntime.\n");
 }
 
 task_t *sched_current_task(void)
@@ -310,6 +363,7 @@ task_t *sched_create_kernel_task(const char *name, kernel_task_entry_t entry, vo
     task->process = process;
     task->entry = entry;
     task->arg = arg;
+    task->vruntime = g_cfs_min_vruntime;
 
     spinlock_unlock(&g_sched_lock);
     sched_irq_restore(irq_flags);
@@ -411,9 +465,8 @@ int sched_wait_queue_wait(wait_queue_t *queue)
     g_current_index = SCHED_TASK_INDEX_NONE;
 
     spinlock_unlock(&g_sched_lock);
-    sched_irq_restore(irq_flags);
-
     x86_64_context_switch(&current->context, &g_bootstrap_task.context);
+    sched_irq_restore(irq_flags);
     return 1;
 }
 
@@ -455,6 +508,8 @@ void sched_tick(void)
         g_current_task != &g_bootstrap_task &&
         g_current_task->state == TASK_RUNNING) {
         g_current_task->runtime_ticks++;
+        g_current_task->vruntime++;
+        g_cfs_min_vruntime = g_current_task->vruntime;
         g_need_resched = 1;
     }
 
@@ -513,13 +568,21 @@ int sched_preempt_on_tick(void)
     g_current_index = SCHED_TASK_INDEX_NONE;
 
     spinlock_unlock(&g_sched_lock);
-    sched_irq_restore(irq_flags);
-
     if (emit_log) {
         serial_write("GNU OS: scheduler preemption via timer IRQ active.\n");
     }
+    if (g_sched_trace_budget > 0U) {
+        serial_write("GNU OS: sched preempt tid=0x");
+        serial_write_hex64(current->tid);
+        serial_write(" vr=0x");
+        serial_write_hex64(current->vruntime);
+        serial_write(" rsp=0x");
+        serial_write_hex64(current->context.rsp);
+        serial_write("\n");
+    }
 
     x86_64_context_switch(&current->context, &g_bootstrap_task.context);
+    sched_irq_restore(irq_flags);
     return 1;
 }
 
@@ -551,9 +614,18 @@ int sched_run(void)
     g_current_index = next_index;
 
     spinlock_unlock(&g_sched_lock);
-    sched_irq_restore(irq_flags);
-
+    if (g_sched_trace_budget > 0U) {
+        serial_write("GNU OS: sched switch tid=0x");
+        serial_write_hex64(next->tid);
+        serial_write(" vr=0x");
+        serial_write_hex64(next->vruntime);
+        serial_write(" rsp=0x");
+        serial_write_hex64(next->context.rsp);
+        serial_write("\n");
+        g_sched_trace_budget--;
+    }
     x86_64_context_switch(&g_bootstrap_task.context, &next->context);
+    sched_irq_restore(irq_flags);
     return 1;
 }
 
@@ -588,9 +660,8 @@ void sched_yield(void)
     g_current_index = SCHED_TASK_INDEX_NONE;
 
     spinlock_unlock(&g_sched_lock);
-    sched_irq_restore(irq_flags);
-
     x86_64_context_switch(&current->context, &g_bootstrap_task.context);
+    sched_irq_restore(irq_flags);
 }
 
 __attribute__((noreturn)) void sched_task_exit(void)
@@ -614,9 +685,8 @@ __attribute__((noreturn)) void sched_task_exit(void)
     g_current_index = SCHED_TASK_INDEX_NONE;
 
     spinlock_unlock(&g_sched_lock);
-    sched_irq_restore(irq_flags);
-
     x86_64_context_switch(&current->context, &g_bootstrap_task.context);
+    sched_irq_restore(irq_flags);
     kpanic("scheduler exit returned unexpectedly");
 }
 

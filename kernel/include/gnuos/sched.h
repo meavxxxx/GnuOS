@@ -37,6 +37,7 @@ typedef struct task {
     kernel_task_entry_t entry;
     void *arg;
     uint64_t runtime_ticks;
+    uint64_t vruntime;
     uint64_t context_switches;
     task_context_t context;
     void *kernel_stack_base;
