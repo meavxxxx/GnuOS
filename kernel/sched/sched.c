@@ -28,6 +28,8 @@ static uint16_t g_current_index = SCHED_TASK_INDEX_NONE;
 static spinlock_t g_sched_lock;
 static uint64_t g_sched_ticks;
 static volatile uint8_t g_need_resched;
+static uint64_t g_preempt_switches;
+static uint8_t g_preempt_log_emitted;
 
 static uint64_t sched_irq_save(void)
 {
@@ -252,6 +254,8 @@ void sched_init(void)
     g_next_tid = 1;
     g_sched_ticks = 0;
     g_need_resched = 0;
+    g_preempt_switches = 0;
+    g_preempt_log_emitted = 0;
 
     sched_reset_task(&g_bootstrap_task);
     g_bootstrap_task.tid = 0;
@@ -463,6 +467,62 @@ void sched_request_resched(void)
     g_need_resched = 1;
 }
 
+int sched_preempt_on_tick(void)
+{
+    task_t *current = NULL;
+    uint16_t current_index = SCHED_TASK_INDEX_NONE;
+    uint8_t emit_log = 0;
+
+    uint64_t irq_flags = sched_irq_save();
+    spinlock_lock(&g_sched_lock);
+
+    if (!g_need_resched) {
+        spinlock_unlock(&g_sched_lock);
+        sched_irq_restore(irq_flags);
+        return 0;
+    }
+
+    current = g_current_task;
+    current_index = g_current_index;
+    if (!current ||
+        current == &g_bootstrap_task ||
+        current->state != TASK_RUNNING ||
+        current_index == SCHED_TASK_INDEX_NONE) {
+        g_need_resched = 0;
+        spinlock_unlock(&g_sched_lock);
+        sched_irq_restore(irq_flags);
+        return 0;
+    }
+
+    current->state = TASK_READY;
+    if (!sched_enqueue_task(current_index)) {
+        current->state = TASK_RUNNING;
+        g_need_resched = 0;
+        spinlock_unlock(&g_sched_lock);
+        sched_irq_restore(irq_flags);
+        return 0;
+    }
+
+    g_need_resched = 0;
+    g_preempt_switches++;
+    if (!g_preempt_log_emitted) {
+        g_preempt_log_emitted = 1;
+        emit_log = 1;
+    }
+    g_current_task = &g_bootstrap_task;
+    g_current_index = SCHED_TASK_INDEX_NONE;
+
+    spinlock_unlock(&g_sched_lock);
+    sched_irq_restore(irq_flags);
+
+    if (emit_log) {
+        serial_write("GNU OS: scheduler preemption via timer IRQ active.\n");
+    }
+
+    x86_64_context_switch(&current->context, &g_bootstrap_task.context);
+    return 1;
+}
+
 int sched_run(void)
 {
     task_t *next = NULL;
@@ -584,4 +644,17 @@ uint64_t sched_total_ticks(void)
     sched_irq_restore(irq_flags);
 
     return ticks;
+}
+
+uint64_t sched_preempt_count(void)
+{
+    uint64_t preempted = 0;
+
+    uint64_t irq_flags = sched_irq_save();
+    spinlock_lock(&g_sched_lock);
+    preempted = g_preempt_switches;
+    spinlock_unlock(&g_sched_lock);
+    sched_irq_restore(irq_flags);
+
+    return preempted;
 }

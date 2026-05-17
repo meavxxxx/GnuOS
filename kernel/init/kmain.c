@@ -950,8 +950,9 @@ void kmain(uint64_t boot_magic, uint64_t boot_info_addr)
     current_task = sched_current_task();
     if (current_task) {
         kprintf(
-            "GNU OS: sched ticks=%u, current runtime=%u, switches=%u\n",
+            "GNU OS: sched ticks=%u, preemptions=%u, current runtime=%u, switches=%u\n",
             sched_total_ticks(),
+            sched_preempt_count(),
             current_task->runtime_ticks,
             current_task->context_switches);
     }
@@ -965,6 +966,7 @@ void kmain(uint64_t boot_magic, uint64_t boot_info_addr)
 #endif
 
     for (;;) {
+        x86_64_interrupts_enable();
         if (!sched_run()) {
             __asm__ volatile("hlt");
         }

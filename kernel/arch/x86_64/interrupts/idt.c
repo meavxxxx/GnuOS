@@ -6,6 +6,7 @@
 #include <gnuos/panic.h>
 #include <gnuos/pic.h>
 #include <gnuos/pit.h>
+#include <gnuos/sched.h>
 #include <gnuos/serial.h>
 
 #define IDT_ENTRIES 256U
@@ -108,6 +109,7 @@ __attribute__((interrupt)) static void isr_irq0_timer(struct interrupt_frame *f)
     (void)f;
     pit_on_irq();
     pic_send_eoi(0);
+    (void)sched_preempt_on_tick();
 }
 
 __attribute__((interrupt)) static void isr_irq1_keyboard(struct interrupt_frame *f)

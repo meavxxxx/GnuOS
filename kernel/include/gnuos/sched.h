@@ -60,10 +60,12 @@ int sched_wait_queue_wake_one(wait_queue_t *queue);
 uint64_t sched_wait_queue_wake_all(wait_queue_t *queue);
 void sched_tick(void);
 void sched_request_resched(void);
+int sched_preempt_on_tick(void);
 int sched_run(void);
 void sched_yield(void);
 __attribute__((noreturn)) void sched_task_exit(void);
 uint64_t sched_ready_count(void);
 uint64_t sched_total_ticks(void);
+uint64_t sched_preempt_count(void);
 
 #endif

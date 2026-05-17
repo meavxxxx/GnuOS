@@ -176,7 +176,7 @@ and a full userland based on GNU tooling.
 #### 1.5 Process Scheduler
 
 - [x] Core structures: TCB, PCB
-- [ ] Preemptive multitasking
+- [x] Preemptive multitasking
 - [ ] CFS (Completely Fair Scheduler)
 - [ ] Scheduling priorities and classes (`SCHED_FIFO`, `SCHED_RR`, `SCHED_OTHER`)
 - [ ] SMP load balancing across CPUs
